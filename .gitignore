@@ -1,0 +1,26 @@
+# --- Python & Environment ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+venv/
+.venv/
+env/
+
+*.db
+*.sqlite3
+*.sqlite
+
+# --- Environment variables ---
+.env
+.env.local
+config.py
+
+# --- IDEs & OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
