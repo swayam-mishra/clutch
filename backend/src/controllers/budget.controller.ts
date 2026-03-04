@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import prisma from "../config/prisma";
+import pool from "../config/db";
 
 // POST /api/budget — Create or update monthly budget (upsert)
 export const createOrUpdateBudget = async (req: Request, res: Response) => {
@@ -27,23 +27,23 @@ export const createOrUpdateBudget = async (req: Request, res: Response) => {
       return;
     }
 
-    const budget = await prisma.budget.upsert({
-      where: {
-        userId_month: { userId, month },
-      },
-      update: {
-        totalIncome: parseFloat(totalIncome),
-        categoryLimits,
-      },
-      create: {
-        userId,
-        month,
-        totalIncome: parseFloat(totalIncome),
-        categoryLimits,
-      },
-    });
+    const query = `
+      INSERT INTO budgets (user_id, month, total_income, category_limits)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (user_id, month)
+      DO UPDATE SET total_income = $3, category_limits = $4
+      RETURNING *;
+    `;
 
-    res.status(201).json(budget);
+    const values = [
+      userId,
+      month,
+      parseFloat(totalIncome),
+      JSON.stringify(categoryLimits),
+    ];
+
+    const result = await pool.query(query, values);
+    res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Error creating/updating budget:", error);
     res.status(500).json({
@@ -71,13 +71,12 @@ export const getBudgetByMonth = async (req: Request, res: Response) => {
       return;
     }
 
-    const budget = await prisma.budget.findUnique({
-      where: {
-        userId_month: { userId: userId as string, month },
-      },
-    });
+    const result = await pool.query(
+      "SELECT * FROM budgets WHERE user_id = $1 AND month = $2;",
+      [userId, month]
+    );
 
-    if (!budget) {
+    if (result.rows.length === 0) {
       res.status(404).json({
         error: true,
         code: "BUDGET_NOT_FOUND",
@@ -87,7 +86,7 @@ export const getBudgetByMonth = async (req: Request, res: Response) => {
       return;
     }
 
-    res.json(budget);
+    res.json(result.rows[0]);
   } catch (error) {
     console.error("Error fetching budget:", error);
     res.status(500).json({
@@ -115,13 +114,12 @@ export const getBudgetStatus = async (req: Request, res: Response) => {
       return;
     }
 
-    const budget = await prisma.budget.findUnique({
-      where: {
-        userId_month: { userId: userId as string, month },
-      },
-    });
+    const budgetResult = await pool.query(
+      "SELECT * FROM budgets WHERE user_id = $1 AND month = $2;",
+      [userId, month]
+    );
 
-    if (!budget) {
+    if (budgetResult.rows.length === 0) {
       res.status(404).json({
         error: true,
         code: "BUDGET_NOT_FOUND",
@@ -131,20 +129,25 @@ export const getBudgetStatus = async (req: Request, res: Response) => {
       return;
     }
 
+    const budget = budgetResult.rows[0];
+
     // Fetch expenses for this month
-    const [year, mon] = month.split("-").map(Number);
+    const [year, mon] = (month as string).split("-").map(Number);
     const startOfMonth = new Date(year, mon - 1, 1);
     const endOfMonth = new Date(year, mon, 1);
 
-    const expenses = await prisma.expense.findMany({
-      where: {
-        userId: userId as string,
-        date: { gte: startOfMonth, lt: endOfMonth },
-      },
-    });
+    const expensesResult = await pool.query(
+      "SELECT * FROM expenses WHERE user_id = $1 AND date >= $2 AND date < $3;",
+      [userId, startOfMonth, endOfMonth]
+    );
+
+    const expenses = expensesResult.rows;
 
     // Calculate totals
-    const totalSpent = expenses.reduce((sum, e) => sum + e.amount, 0);
+    const totalSpent = expenses.reduce(
+      (sum: number, e: any) => sum + parseFloat(e.amount),
+      0
+    );
     const now = new Date();
     const dayOfMonth = now.getDate();
     const daysInMonth = new Date(year, mon, 0).getDate();
@@ -152,10 +155,11 @@ export const getBudgetStatus = async (req: Request, res: Response) => {
     const spendVelocity =
       dayOfMonth > 0 ? Math.round(totalSpent / dayOfMonth) : 0;
     const projectedTotal = spendVelocity * daysInMonth;
-    const projectedEndBalance = budget.totalIncome - projectedTotal;
+    const totalIncome = parseFloat(budget.total_income);
+    const projectedEndBalance = totalIncome - projectedTotal;
 
     // Calculate projected run-out day
-    const remainingBudget = budget.totalIncome - totalSpent;
+    const remainingBudget = totalIncome - totalSpent;
     const projectedRunOutDay =
       spendVelocity > 0
         ? Math.min(
@@ -165,11 +169,11 @@ export const getBudgetStatus = async (req: Request, res: Response) => {
         : daysInMonth;
 
     // Category-level status
-    const categoryLimits = budget.categoryLimits as Record<string, number>;
+    const categoryLimits = budget.category_limits as Record<string, number>;
     const categorySpend: Record<string, number> = {};
     for (const expense of expenses) {
       categorySpend[expense.category] =
-        (categorySpend[expense.category] || 0) + expense.amount;
+        (categorySpend[expense.category] || 0) + parseFloat(expense.amount);
     }
 
     const categoryStatus = Object.entries(categoryLimits).map(
@@ -186,7 +190,7 @@ export const getBudgetStatus = async (req: Request, res: Response) => {
 
     res.json({
       month,
-      totalBudget: budget.totalIncome,
+      totalBudget: totalIncome,
       totalSpent,
       dayOfMonth,
       daysRemaining,

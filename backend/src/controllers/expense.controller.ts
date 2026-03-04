@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import prisma from "../config/prisma";
+import pool from "../config/db";
 
 // POST /api/expenses — Log a new expense
 export const createExpense = async (req: Request, res: Response) => {
@@ -16,18 +16,23 @@ export const createExpense = async (req: Request, res: Response) => {
       return;
     }
 
-    const expense = await prisma.expense.create({
-      data: {
-        userId,
-        amount: parseFloat(amount),
-        category,
-        description: description || null,
-        date: date ? new Date(date) : new Date(),
-        moodTag: moodTag || null,
-      },
-    });
+    const query = `
+      INSERT INTO expenses (user_id, amount, category, description, date, mood_tag)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *;
+    `;
 
-    res.status(201).json(expense);
+    const values = [
+      userId,
+      parseFloat(amount),
+      category,
+      description || null,
+      date ? new Date(date) : new Date(),
+      moodTag || null,
+    ];
+
+    const result = await pool.query(query, values);
+    res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Error creating expense:", error);
     res.status(500).json({
@@ -55,39 +60,57 @@ export const getExpenses = async (req: Request, res: Response) => {
       return;
     }
 
-    // Build filter conditions
-    const where: any = { userId: userId as string };
-
-    if (category) {
-      where.category = category as string;
-    }
-
-    if (month) {
-      // month format: "YYYY-MM"
-      const [year, mon] = (month as string).split("-").map(Number);
-      where.date = {
-        gte: new Date(year, mon - 1, 1),
-        lt: new Date(year, mon, 1),
-      };
-    } else if (startDate || endDate) {
-      where.date = {};
-      if (startDate) where.date.gte = new Date(startDate as string);
-      if (endDate) where.date.lte = new Date(endDate as string);
-    }
-
     const take = limit ? parseInt(limit as string) : 20;
     const skip = offset ? parseInt(offset as string) : 0;
 
-    const expenses = await prisma.expense.findMany({
-      where,
-      orderBy: { date: "desc" },
-      take,
-      skip,
+    // Build dynamic WHERE clause
+    const conditions: string[] = ["user_id = $1"];
+    const params: any[] = [userId];
+    let paramIdx = 2;
+
+    if (category) {
+      conditions.push(`category = $${paramIdx++}`);
+      params.push(category);
+    }
+
+    if (month) {
+      const [year, mon] = (month as string).split("-").map(Number);
+      conditions.push(`date >= $${paramIdx++} AND date < $${paramIdx++}`);
+      params.push(new Date(year, mon - 1, 1), new Date(year, mon, 1));
+    } else if (startDate || endDate) {
+      if (startDate) {
+        conditions.push(`date >= $${paramIdx++}`);
+        params.push(new Date(startDate as string));
+      }
+      if (endDate) {
+        conditions.push(`date <= $${paramIdx++}`);
+        params.push(new Date(endDate as string));
+      }
+    }
+
+    const whereClause = conditions.join(" AND ");
+
+    const expensesQuery = `
+      SELECT * FROM expenses
+      WHERE ${whereClause}
+      ORDER BY date DESC
+      LIMIT $${paramIdx++} OFFSET $${paramIdx++};
+    `;
+    params.push(take, skip);
+
+    const countQuery = `SELECT COUNT(*) FROM expenses WHERE ${whereClause};`;
+
+    const [expensesResult, countResult] = await Promise.all([
+      pool.query(expensesQuery, params),
+      pool.query(countQuery, params.slice(0, params.length - 2)),
+    ]);
+
+    res.json({
+      expenses: expensesResult.rows,
+      total: parseInt(countResult.rows[0].count),
+      limit: take,
+      offset: skip,
     });
-
-    const total = await prisma.expense.count({ where });
-
-    res.json({ expenses, total, limit: take, offset: skip });
   } catch (error) {
     console.error("Error fetching expenses:", error);
     res.status(500).json({
@@ -124,28 +147,32 @@ export const getExpenseSummary = async (req: Request, res: Response) => {
     const startOfMonth = new Date(year, mon - 1, 1);
     const endOfMonth = new Date(year, mon, 1);
 
-    const expenses = await prisma.expense.findMany({
-      where: {
-        userId: userId as string,
-        date: { gte: startOfMonth, lt: endOfMonth },
-      },
-    });
+    const query = `
+      SELECT category, SUM(amount) as total
+      FROM expenses
+      WHERE user_id = $1 AND date >= $2 AND date < $3
+      GROUP BY category;
+    `;
 
-    // Group by category
-    const categoryTotals: Record<string, number> = {};
+    const result = await pool.query(query, [userId, startOfMonth, endOfMonth]);
+
+    const categoryBreakdown: Record<string, number> = {};
     let totalSpent = 0;
 
-    for (const expense of expenses) {
-      categoryTotals[expense.category] =
-        (categoryTotals[expense.category] || 0) + expense.amount;
-      totalSpent += expense.amount;
+    for (const row of result.rows) {
+      const amount = parseFloat(row.total);
+      categoryBreakdown[row.category] = amount;
+      totalSpent += amount;
     }
 
     res.json({
       month: targetMonth,
       totalSpent,
-      categoryBreakdown: categoryTotals,
-      expenseCount: expenses.length,
+      categoryBreakdown,
+      expenseCount: result.rows.reduce(
+        (sum: number, _row: any) => sum + 1,
+        0
+      ),
     });
   } catch (error) {
     console.error("Error fetching expense summary:", error);
@@ -163,9 +190,11 @@ export const getExpenseById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const expense = await prisma.expense.findUnique({ where: { id } });
+    const result = await pool.query("SELECT * FROM expenses WHERE id = $1;", [
+      id,
+    ]);
 
-    if (!expense) {
+    if (result.rows.length === 0) {
       res.status(404).json({
         error: true,
         code: "EXPENSE_NOT_FOUND",
@@ -175,7 +204,7 @@ export const getExpenseById = async (req: Request, res: Response) => {
       return;
     }
 
-    res.json(expense);
+    res.json(result.rows[0]);
   } catch (error) {
     console.error("Error fetching expense:", error);
     res.status(500).json({
@@ -193,8 +222,12 @@ export const updateExpense = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { amount, category, description, date, moodTag } = req.body;
 
-    const existing = await prisma.expense.findUnique({ where: { id } });
-    if (!existing) {
+    // Check existence
+    const existing = await pool.query(
+      "SELECT id FROM expenses WHERE id = $1;",
+      [id]
+    );
+    if (existing.rows.length === 0) {
       res.status(404).json({
         error: true,
         code: "EXPENSE_NOT_FOUND",
@@ -204,18 +237,51 @@ export const updateExpense = async (req: Request, res: Response) => {
       return;
     }
 
-    const expense = await prisma.expense.update({
-      where: { id },
-      data: {
-        ...(amount !== undefined && { amount: parseFloat(amount) }),
-        ...(category !== undefined && { category }),
-        ...(description !== undefined && { description }),
-        ...(date !== undefined && { date: new Date(date) }),
-        ...(moodTag !== undefined && { moodTag }),
-      },
-    });
+    // Build dynamic SET clause
+    const setClauses: string[] = [];
+    const params: any[] = [];
+    let paramIdx = 1;
 
-    res.json(expense);
+    if (amount !== undefined) {
+      setClauses.push(`amount = $${paramIdx++}`);
+      params.push(parseFloat(amount));
+    }
+    if (category !== undefined) {
+      setClauses.push(`category = $${paramIdx++}`);
+      params.push(category);
+    }
+    if (description !== undefined) {
+      setClauses.push(`description = $${paramIdx++}`);
+      params.push(description);
+    }
+    if (date !== undefined) {
+      setClauses.push(`date = $${paramIdx++}`);
+      params.push(new Date(date));
+    }
+    if (moodTag !== undefined) {
+      setClauses.push(`mood_tag = $${paramIdx++}`);
+      params.push(moodTag);
+    }
+
+    if (setClauses.length === 0) {
+      res.status(400).json({
+        error: true,
+        code: "VALIDATION_ERROR",
+        message: "No fields to update.",
+        statusCode: 400,
+      });
+      return;
+    }
+
+    params.push(id);
+    const query = `
+      UPDATE expenses SET ${setClauses.join(", ")}
+      WHERE id = $${paramIdx}
+      RETURNING *;
+    `;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows[0]);
   } catch (error) {
     console.error("Error updating expense:", error);
     res.status(500).json({
@@ -232,8 +298,12 @@ export const deleteExpense = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const existing = await prisma.expense.findUnique({ where: { id } });
-    if (!existing) {
+    const result = await pool.query(
+      "DELETE FROM expenses WHERE id = $1 RETURNING id;",
+      [id]
+    );
+
+    if (result.rows.length === 0) {
       res.status(404).json({
         error: true,
         code: "EXPENSE_NOT_FOUND",
@@ -242,8 +312,6 @@ export const deleteExpense = async (req: Request, res: Response) => {
       });
       return;
     }
-
-    await prisma.expense.delete({ where: { id } });
 
     res.json({ message: "Expense deleted successfully." });
   } catch (error) {
