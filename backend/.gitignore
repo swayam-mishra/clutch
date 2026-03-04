@@ -8,22 +8,9 @@ node_modules/
 
 # Build output
 dist/
-build/
 
-# Prisma
-backend/src/generated/prisma
-
-# IDE / Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
+# Prisma generated client
+/src/generated/prisma
 
 # Logs
 *.log

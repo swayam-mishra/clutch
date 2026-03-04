@@ -1,0 +1,75 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                   String        @id @default(uuid())
+  name                 String
+  email                String        @unique
+  monthlyIncome        Float         @default(0)
+  currency             String        @default("INR")
+  notificationsEnabled Boolean       @default(true)
+  weeklyReviewDay      String        @default("Sunday")
+  createdAt            DateTime      @default(now())
+
+  // Relationships
+  expenses             Expense[]
+  budgets              Budget[]
+  savingsGoals         SavingsGoal[]
+  healthScores         HealthScore[]
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  amount      Float
+  category    String
+  description String?
+  date        DateTime @default(now()) // Storing the specific date of the expense
+  moodTag     String?
+  createdAt   DateTime @default(now())
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Budget {
+  id            String   @id @default(uuid())
+  month         String   // Format: "YYYY-MM"
+  totalIncome   Float
+  categoryLimits Json    // Stores { "Food": 2000, "Transport": 800 }
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month]) // Ensure only one budget per user per month
+}
+
+model SavingsGoal {
+  id                  String   @id @default(uuid())
+  title               String
+  targetAmount        Float
+  savedAmount         Float    @default(0)
+  deadline            DateTime
+  monthlyContribution Float
+  createdAt           DateTime @default(now())
+
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model HealthScore {
+  id          String   @id @default(uuid())
+  score       Int
+  factors     Json     // Stores { spendingBalance: 30, consistency: 20, etc. }
+  explanation String
+  computedAt  DateTime @default(now())
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
