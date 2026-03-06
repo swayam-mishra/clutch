@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import expenseRoutes from "./routes/expense.routes";
 import budgetRoutes from "./routes/budget.routes";
+import aiRoutes from "./routes/ai.routes";
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.get("/api/health", (_req, res) => {
 // Routes
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/budget", budgetRoutes);
+app.use("/api/ai", aiRoutes);
 
 // Start server
 app.listen(PORT, () => {
