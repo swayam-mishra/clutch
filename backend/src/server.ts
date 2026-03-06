@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import expenseRoutes from "./routes/expense.routes";
 import budgetRoutes from "./routes/budget.routes";
 import aiRoutes from "./routes/ai.routes";
+import { initCronJobs } from "./jobs/nudge.cron";
 
 dotenv.config();
 
@@ -27,6 +28,9 @@ app.use("/api/ai", aiRoutes);
 // Start server
 app.listen(PORT, () => {
   console.log(`Clutch backend running on http://localhost:${PORT}`);
+
+  // Initialize scheduled tasks
+  initCronJobs();
 });
 
 export default app;
