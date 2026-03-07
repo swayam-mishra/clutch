@@ -1,6 +1,5 @@
 import pool from "../config/db";
 
-
 export interface CategoryStatus {
   category: string;
   limit: number;
@@ -18,18 +17,17 @@ export interface FinancialContext {
   dailyVelocity: number;
   projectedRunOutDay: number | null;
   categoryStatus: CategoryStatus[];
+  // New Additions:
+  recentExpenses: any[];
+  activeGoals: any[];
+  healthScore: number | null;
+  weeklySpendTrend: {
+    last7Days: number;
+    prev7Days: number;
+    percentageChange: number;
+  };
 }
 
-// ---------------------------------------------------------------------------
-// 2. Service Implementation
-// ---------------------------------------------------------------------------
-
-/**
- * Builds a strictly-typed financial context object for the current month
- * to be injected into the AI system prompt.
- * * @param userId - The UUID of the user
- * @returns FinancialContext object or null if no budget is set
- */
 export const buildFinancialContext = async (userId: string): Promise<FinancialContext | null> => {
   const now = new Date();
   const year = now.getFullYear();
@@ -45,8 +43,7 @@ export const buildFinancialContext = async (userId: string): Promise<FinancialCo
   const daysInMonth = new Date(year, monthNum, 0).getDate();
   const daysRemaining = Math.max(0, daysInMonth - dayOfMonth);
 
-  // 3. Optimized Aggregation SQL (Single Round-Trip)
-  const query = `
+  const mainQuery = `
     WITH budget_data AS (
       SELECT total_income, category_limits
       FROM budgets
@@ -75,15 +72,28 @@ export const buildFinancialContext = async (userId: string): Promise<FinancialCo
     LEFT JOIN expense_data e ON true;
   `;
 
-  const values = [userId, currentMonthStr, startOfMonth, endOfMonth];
-  const result = await pool.query(query, values);
+  const recentExpensesQuery = `SELECT amount, category, description, date FROM expenses WHERE user_id = $1 ORDER BY date DESC LIMIT 10;`;
+  const activeGoalsQuery = `SELECT title, target_amount, saved_amount, deadline FROM savings_goals WHERE user_id = $1 AND deadline >= CURRENT_DATE;`;
+  const healthScoreQuery = `SELECT score FROM health_scores WHERE user_id = $1 ORDER BY computed_at DESC LIMIT 1;`;
+  const weeklyTrendQuery = `
+    SELECT
+      COALESCE(SUM(CASE WHEN date >= CURRENT_DATE - INTERVAL '7 days' THEN amount ELSE 0 END), 0) as last_7_days,
+      COALESCE(SUM(CASE WHEN date >= CURRENT_DATE - INTERVAL '14 days' AND date < CURRENT_DATE - INTERVAL '7 days' THEN amount ELSE 0 END), 0) as prev_7_days
+    FROM expenses WHERE user_id = $1;
+  `;
 
-  if (result.rows.length === 0) {
-    // No budget found for this user for the current month
-    return null;
-  }
+  // Run all queries in parallel for performance
+  const [mainRes, expensesRes, goalsRes, healthRes, trendRes] = await Promise.all([
+    pool.query(mainQuery, [userId, currentMonthStr, startOfMonth, endOfMonth]),
+    pool.query(recentExpensesQuery, [userId]),
+    pool.query(activeGoalsQuery, [userId]),
+    pool.query(healthScoreQuery, [userId]),
+    pool.query(weeklyTrendQuery, [userId])
+  ]);
 
-  const row = result.rows[0];
+  if (mainRes.rows.length === 0) return null;
+
+  const row = mainRes.rows[0];
   const totalBudget = parseFloat(row.total_income);
   const totalSpent = parseFloat(row.total_spent);
   const remainingBudget = totalBudget - totalSpent;
@@ -109,7 +119,10 @@ export const buildFinancialContext = async (userId: string): Promise<FinancialCo
     };
   });
 
-  // 4. Return the strictly typed context
+  const last7 = parseFloat(trendRes.rows[0].last_7_days);
+  const prev7 = parseFloat(trendRes.rows[0].prev_7_days);
+  const percentageChange = prev7 === 0 ? (last7 > 0 ? 100 : 0) : Math.round(((last7 - prev7) / prev7) * 100);
+
   return {
     month: currentMonthStr,
     dayOfMonth,
@@ -119,6 +132,14 @@ export const buildFinancialContext = async (userId: string): Promise<FinancialCo
     remainingBudget,
     dailyVelocity,
     projectedRunOutDay,
-    categoryStatus
+    categoryStatus,
+    recentExpenses: expensesRes.rows,
+    activeGoals: goalsRes.rows,
+    healthScore: healthRes.rows.length > 0 ? healthRes.rows[0].score : null,
+    weeklySpendTrend: {
+      last7Days: last7,
+      prev7Days: prev7,
+      percentageChange
+    }
   };
 };

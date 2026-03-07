@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import expenseRoutes from "./routes/expense.routes";
 import budgetRoutes from "./routes/budget.routes";
 import aiRoutes from "./routes/ai.routes";
+import healthScoreRoutes from "./routes/healthScore.routes";
 import { initCronJobs } from "./jobs/nudge.cron";
 
 dotenv.config();
@@ -24,6 +25,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/budget", budgetRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/health-score", healthScoreRoutes);
 
 // Start server
 app.listen(PORT, () => {
