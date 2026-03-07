@@ -1,16 +1,18 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import pool from "../config/db";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 // POST /api/expenses — Log a new expense
-export const createExpense = async (req: Request, res: Response) => {
+export const createExpense = async (req: AuthRequest, res: Response) => {
   try {
-    const { userId, amount, category, description, date, moodTag } = req.body;
+    const userId = req.user?.id;
+    const { amount, category, description, date, moodTag } = req.body;
 
     if (!userId || !amount || !category) {
       res.status(400).json({
         error: true,
         code: "VALIDATION_ERROR",
-        message: "userId, amount, and category are required.",
+        message: "amount and category are required.",
         statusCode: 400,
       });
       return;
@@ -45,20 +47,10 @@ export const createExpense = async (req: Request, res: Response) => {
 };
 
 // GET /api/expenses — Get all expenses (filterable by month, category, date range, paginated)
-export const getExpenses = async (req: Request, res: Response) => {
+export const getExpenses = async (req: AuthRequest, res: Response) => {
   try {
-    const { userId, month, category, startDate, endDate, limit, offset } =
-      req.query;
-
-    if (!userId) {
-      res.status(400).json({
-        error: true,
-        code: "VALIDATION_ERROR",
-        message: "userId query parameter is required.",
-        statusCode: 400,
-      });
-      return;
-    }
+    const userId = req.user?.id;
+    const { month, category, startDate, endDate, limit, offset } = req.query;
 
     const take = limit ? parseInt(limit as string) : 20;
     const skip = offset ? parseInt(offset as string) : 0;
@@ -123,19 +115,10 @@ export const getExpenses = async (req: Request, res: Response) => {
 };
 
 // GET /api/expenses/summary — Aggregated totals by category for current month
-export const getExpenseSummary = async (req: Request, res: Response) => {
+export const getExpenseSummary = async (req: AuthRequest, res: Response) => {
   try {
-    const { userId, month } = req.query;
-
-    if (!userId) {
-      res.status(400).json({
-        error: true,
-        code: "VALIDATION_ERROR",
-        message: "userId query parameter is required.",
-        statusCode: 400,
-      });
-      return;
-    }
+    const userId = req.user?.id;
+    const { month } = req.query;
 
     // Default to current month
     const now = new Date();
@@ -186,13 +169,15 @@ export const getExpenseSummary = async (req: Request, res: Response) => {
 };
 
 // GET /api/expenses/:id — Get single expense
-export const getExpenseById = async (req: Request, res: Response) => {
+export const getExpenseById = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
 
-    const result = await pool.query("SELECT * FROM expenses WHERE id = $1;", [
-      id,
-    ]);
+    const result = await pool.query(
+      "SELECT * FROM expenses WHERE id = $1 AND user_id = $2;",
+      [id, userId]
+    );
 
     if (result.rows.length === 0) {
       res.status(404).json({
@@ -217,15 +202,16 @@ export const getExpenseById = async (req: Request, res: Response) => {
 };
 
 // PUT /api/expenses/:id — Update an expense
-export const updateExpense = async (req: Request, res: Response) => {
+export const updateExpense = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
     const { amount, category, description, date, moodTag } = req.body;
 
-    // Check existence
+    // Check existence and ownership
     const existing = await pool.query(
-      "SELECT id FROM expenses WHERE id = $1;",
-      [id]
+      "SELECT id FROM expenses WHERE id = $1 AND user_id = $2;",
+      [id, userId]
     );
     if (existing.rows.length === 0) {
       res.status(404).json({
@@ -273,10 +259,10 @@ export const updateExpense = async (req: Request, res: Response) => {
       return;
     }
 
-    params.push(id);
+    params.push(id, userId);
     const query = `
       UPDATE expenses SET ${setClauses.join(", ")}
-      WHERE id = $${paramIdx}
+      WHERE id = $${paramIdx} AND user_id = $${paramIdx + 1}
       RETURNING *;
     `;
 
@@ -294,13 +280,14 @@ export const updateExpense = async (req: Request, res: Response) => {
 };
 
 // DELETE /api/expenses/:id — Delete an expense
-export const deleteExpense = async (req: Request, res: Response) => {
+export const deleteExpense = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
 
     const result = await pool.query(
-      "DELETE FROM expenses WHERE id = $1 RETURNING id;",
-      [id]
+      "DELETE FROM expenses WHERE id = $1 AND user_id = $2 RETURNING id;",
+      [id, userId]
     );
 
     if (result.rows.length === 0) {

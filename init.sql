@@ -50,6 +50,7 @@ CREATE TABLE health_scores (
     computed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE users ADD COLUMN password_hash TEXT;
 ALTER TABLE users ADD COLUMN device_token TEXT;
 
 CREATE TABLE weekly_reviews (
@@ -57,5 +58,35 @@ CREATE TABLE weekly_reviews (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     summary TEXT NOT NULL,
     week_start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Micro-Challenges
+CREATE TABLE challenges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    target_amount NUMERIC,
+    category TEXT,
+    duration_days INTEGER NOT NULL
+);
+
+CREATE TABLE user_challenges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    challenge_id UUID NOT NULL REFERENCES challenges(id),
+    status TEXT DEFAULT 'active', -- active, completed, failed
+    start_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    progress NUMERIC DEFAULT 0
+);
+
+-- Split Expenses
+CREATE TABLE splits (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    expense_id UUID NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    split_with_name TEXT NOT NULL,
+    amount_owed NUMERIC NOT NULL,
+    is_settled BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
