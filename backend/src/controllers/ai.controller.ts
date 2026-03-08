@@ -1,18 +1,20 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import anthropic from "../config/ai";
 import { buildFinancialContext } from "../services/financeContext.service";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
 
-export const purchaseAdvisor = async (req: Request, res: Response): Promise<void> => {
+export const purchaseAdvisor = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId, itemDescription, amount } = req.body;
+    const userId = req.user?.id;
+    const { itemDescription, amount } = req.body;
 
     if (!userId || !itemDescription || !amount) {
       res.status(400).json({
         error: true,
         code: "VALIDATION_ERROR",
-        message: "userId, itemDescription, and amount are required.",
+        message: "itemDescription and amount are required.",
         statusCode: 400,
       });
       return;
@@ -74,15 +76,16 @@ export const purchaseAdvisor = async (req: Request, res: Response): Promise<void
   }
 };
 
-export const chatInterface = async (req: Request, res: Response): Promise<void> => {
+export const chatInterface = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId, message, conversationHistory = [] } = req.body;
+    const userId = req.user?.id;
+    const { message, conversationHistory = [] } = req.body;
 
     if (!userId || !message) {
       res.status(400).json({
         error: true,
         code: "VALIDATION_ERROR",
-        message: "userId and message are required.",
+        message: "message is required.",
         statusCode: 400,
       });
       return;

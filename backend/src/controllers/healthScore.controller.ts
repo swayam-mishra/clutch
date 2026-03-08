@@ -1,12 +1,13 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import pool from "../config/db";
 import { calculateAndSaveHealthScore } from "../services/healthScore.service";
+import { AuthRequest } from "../middleware/auth.middleware";
 
-export const getLatestScore = async (req: Request, res: Response): Promise<void> => {
+export const getLatestScore = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId } = req.query;
+    const userId = req.user?.id;
     if (!userId) {
-      res.status(400).json({ error: true, message: "userId query parameter is required." });
+      res.status(401).json({ error: true, message: "Authentication required." });
       return;
     }
 
@@ -33,11 +34,11 @@ export const getLatestScore = async (req: Request, res: Response): Promise<void>
   }
 };
 
-export const getScoreHistory = async (req: Request, res: Response): Promise<void> => {
+export const getScoreHistory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { userId } = req.query;
+    const userId = req.user?.id;
     if (!userId) {
-      res.status(400).json({ error: true, message: "userId query parameter is required." });
+      res.status(401).json({ error: true, message: "Authentication required." });
       return;
     }
 

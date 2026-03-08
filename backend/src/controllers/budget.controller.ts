@@ -1,16 +1,18 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import pool from "../config/db";
+import { AuthRequest } from "../middleware/auth.middleware";
 
 // POST /api/budget — Create or update monthly budget (upsert)
-export const createOrUpdateBudget = async (req: Request, res: Response) => {
+export const createOrUpdateBudget = async (req: AuthRequest, res: Response) => {
   try {
-    const { userId, month, totalIncome, categoryLimits } = req.body;
+    const userId = req.user?.id;
+    const { month, totalIncome, categoryLimits } = req.body;
 
     if (!userId || !month || totalIncome === undefined || !categoryLimits) {
       res.status(400).json({
         error: true,
         code: "VALIDATION_ERROR",
-        message: "userId, month, totalIncome, and categoryLimits are required.",
+        message: "month, totalIncome, and categoryLimits are required.",
         statusCode: 400,
       });
       return;
@@ -56,20 +58,10 @@ export const createOrUpdateBudget = async (req: Request, res: Response) => {
 };
 
 // GET /api/budget/:month — Get budget for a given month
-export const getBudgetByMonth = async (req: Request, res: Response) => {
+export const getBudgetByMonth = async (req: AuthRequest, res: Response) => {
   try {
     const { month } = req.params;
-    const { userId } = req.query;
-
-    if (!userId) {
-      res.status(400).json({
-        error: true,
-        code: "VALIDATION_ERROR",
-        message: "userId query parameter is required.",
-        statusCode: 400,
-      });
-      return;
-    }
+    const userId = req.user?.id;
 
     const result = await pool.query(
       "SELECT * FROM budgets WHERE user_id = $1 AND month = $2;",
@@ -99,20 +91,10 @@ export const getBudgetByMonth = async (req: Request, res: Response) => {
 };
 
 // GET /api/budget/:month/status — Real-time spend vs. budget with velocity
-export const getBudgetStatus = async (req: Request, res: Response) => {
+export const getBudgetStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { month } = req.params;
-    const { userId } = req.query;
-
-    if (!userId) {
-      res.status(400).json({
-        error: true,
-        code: "VALIDATION_ERROR",
-        message: "userId query parameter is required.",
-        statusCode: 400,
-      });
-      return;
-    }
+    const userId = req.user?.id;
 
     const budgetResult = await pool.query(
       "SELECT * FROM budgets WHERE user_id = $1 AND month = $2;",
