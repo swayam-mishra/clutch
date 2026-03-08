@@ -1,5 +1,6 @@
 import { Response } from "express";
 import pool from "../config/db";
+import { buildFinancialContext } from "../services/financeContext.service";
 import { AuthRequest } from "../middleware/auth.middleware";
 
 // GET /api/expenses/trends
@@ -71,5 +72,55 @@ export const getAnomalies = async (req: AuthRequest, res: Response): Promise<voi
     res.json({ anomalies: result.rows });
   } catch (error) {
     res.status(500).json({ error: true, message: "Failed to fetch anomalies." });
+  }
+};
+
+// GET /api/insights/forecast
+export const getForecast = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return;
+    
+    const context = await buildFinancialContext(userId);
+    if (!context) {
+      res.status(404).json({ error: true, message: "Budget context not found for forecasting." });
+      return;
+    }
+
+    const projectedBalance = context.totalBudget - (context.dailyVelocity * (context.dayOfMonth + context.daysRemaining));
+    const runOutDate = new Date();
+    if (context.projectedRunOutDay) {
+      runOutDate.setDate(context.projectedRunOutDay);
+    }
+
+    res.json({
+      currentBalance: context.remainingBudget,
+      dailyAverageSpend: context.dailyVelocity,
+      daysRemaining: context.daysRemaining,
+      projectedBalance,
+      projectedRunOutDay: context.projectedRunOutDay ? runOutDate.toISOString().split('T')[0] : null,
+      trajectoryStatus: projectedBalance < 0 ? "at_risk" : "on_track"
+    });
+  } catch (error) {
+    res.status(500).json({ error: true, message: "Failed to generate forecast." });
+  }
+};
+
+// GET /api/insights/subscriptions
+export const getSubscriptions = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const query = `
+      SELECT category, description, amount, COUNT(*) as frequency
+      FROM expenses 
+      WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '3 months'
+      GROUP BY category, description, amount 
+      HAVING COUNT(DISTINCT date_trunc('month', date)) >= 2
+      ORDER BY frequency DESC;
+    `;
+    const result = await pool.query(query, [userId]);
+    res.json({ subscriptions: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: true, message: "Failed to detect subscriptions." });
   }
 };

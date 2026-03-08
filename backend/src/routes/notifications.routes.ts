@@ -1,9 +1,11 @@
 import { Router } from "express";
-import { updatePreferences } from "../controllers/notifications.controller";
+import { registerToken, getSettings, updateSettings } from "../controllers/notifications.controller";
 import { authenticate } from "../middleware/auth.middleware";
 
 const router = Router();
 
-router.patch("/preferences", authenticate, updatePreferences);
+router.post("/register", authenticate, registerToken);
+router.get("/settings", authenticate, getSettings);
+router.put("/settings", authenticate, updateSettings);
 
 export default router;

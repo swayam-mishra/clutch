@@ -1,5 +1,6 @@
 import { Response } from "express";
 import anthropic from "../config/ai";
+import pool from "../config/db";
 import { buildFinancialContext } from "../services/financeContext.service";
 import { AuthRequest } from "../middleware/auth.middleware";
 
@@ -129,5 +130,38 @@ export const chatInterface = async (req: AuthRequest, res: Response): Promise<vo
       message: "Failed to generate chat response.",
       statusCode: 500,
     });
+  }
+};
+
+// GET /api/ai/weekly-review
+export const getWeeklyReview = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const result = await pool.query(
+      "SELECT * FROM weekly_reviews WHERE user_id = $1 ORDER BY week_start_date DESC LIMIT 1;",
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: true, message: "No weekly reviews found yet." });
+      return;
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: true, message: "Failed to fetch weekly review." });
+  }
+};
+
+// GET /api/ai/weekly-review/history
+export const getWeeklyReviewHistory = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    const result = await pool.query(
+      "SELECT * FROM weekly_reviews WHERE user_id = $1 ORDER BY week_start_date DESC;",
+      [userId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: true, message: "Failed to fetch review history." });
   }
 };
