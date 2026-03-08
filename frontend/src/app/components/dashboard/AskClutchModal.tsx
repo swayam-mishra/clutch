@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, Sparkles, Lightbulb, RotateCcw, ArrowRight, Zap } from "lucide-react";
+import { apiClient } from '../../services/apiClient';
 
 type Verdict = "YES" | "MAYBE" | "NO";
 type Phase = "input" | "loading" | "result";
@@ -10,7 +11,7 @@ type Category = (typeof categories)[number];
 interface VerdictResult {
   verdict: Verdict;
   explanation: string;
-  tip: string;
+  tip?: string;
 }
 
 // ─── Mock AI responses ─────────────────────────
@@ -179,16 +180,24 @@ export function AskClutchModal({ onClose }: { onClose: () => void }) {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [result, setResult] = useState<VerdictResult | null>(null);
 
-  const handleGetVerdict = () => {
+  const [error, setError] = useState<string | null>(null);
+
+  const handleGetVerdict = async () => {
     if (!query.trim()) return;
     setPhase("loading");
-
-    // Simulate AI processing
-    setTimeout(() => {
-      const verdict = getVerdictForInput(query);
-      setResult(verdict);
+    setError(null);
+    try {
+      const aiVerdict = await apiClient('/ai/ask', {
+        method: 'POST',
+        body: JSON.stringify({ query, category: selectedCategory }),
+      });
+      setResult(aiVerdict);
       setPhase("result");
-    }, 2200);
+    } catch (err) {
+      console.error('Ask Clutch failed:', err);
+      setError('Something went wrong. Please try again.');
+      setPhase("input");
+    }
   };
 
   const handleReset = () => {
@@ -327,6 +336,16 @@ export function AskClutchModal({ onClose }: { onClose: () => void }) {
                 Get Verdict
               </button>
 
+              {/* Error message */}
+              {error && (
+                <p
+                  className="text-center"
+                  style={{ fontSize: 13, color: "#EF4444", lineHeight: 1.5 }}
+                >
+                  {error}
+                </p>
+              )}
+
               {/* Helper text */}
               <p
                 className="text-center"
@@ -443,29 +462,31 @@ function ResultView({
       </p>
 
       {/* Tip card */}
-      <div
-        className="flex items-start gap-3 px-5 py-4 rounded-xl"
-        style={{
-          backgroundColor: "#EDE9FF",
-          border: "1px solid rgba(108,71,255,0.08)",
-          animation: showResult ? "fadeUp 0.4s ease-out 0.3s both" : "none",
-        }}
-      >
+      {result.tip && (
         <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-          style={{ backgroundColor: "rgba(108,71,255,0.12)" }}
+          className="flex items-start gap-3 px-5 py-4 rounded-xl"
+          style={{
+            backgroundColor: "#EDE9FF",
+            border: "1px solid rgba(108,71,255,0.08)",
+            animation: showResult ? "fadeUp 0.4s ease-out 0.3s both" : "none",
+          }}
         >
-          <Lightbulb size={16} color="#6C47FF" />
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+            style={{ backgroundColor: "rgba(108,71,255,0.12)" }}
+          >
+            <Lightbulb size={16} color="#6C47FF" />
+          </div>
+          <div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#6C47FF", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>
+              Pro Tip
+            </span>
+            <p style={{ fontSize: 13, color: "rgba(26,26,46,0.6)", lineHeight: 1.6, marginTop: 3 }}>
+              {result.tip}
+            </p>
+          </div>
         </div>
-        <div>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "#6C47FF", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>
-            Pro Tip
-          </span>
-          <p style={{ fontSize: 13, color: "rgba(26,26,46,0.6)", lineHeight: 1.6, marginTop: 3 }}>
-            {result.tip}
-          </p>
-        </div>
-      </div>
+      )}
 
       {/* Ask another */}
       <button

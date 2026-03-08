@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { apiClient } from '../../services/apiClient';
 import { Sparkles, AlertTriangle } from "lucide-react";
 import { DashboardSidebar } from "./DashboardSidebar";
 import { StatCards } from "./StatCards";
@@ -8,10 +9,30 @@ import { SpendTrajectory } from "./SpendTrajectory";
 import { ActiveGoals } from "./ActiveGoals";
 import { AskClutchModal } from "./AskClutchModal";
 
-const healthScore = 78;
-
 export function DashboardPage() {
   const [showAI, setShowAI] = useState(false);
+  const [healthScore, setHealthScore] = useState<number | null>(null);
+  const [expenses, setExpenses] = useState<unknown[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const [scoreData, expenseData] = await Promise.all([
+          apiClient('/health-score'),
+          apiClient('/expense?limit=5'),
+        ]);
+        setHealthScore(scoreData.score);
+        setExpenses(expenseData.data);
+      } catch (error) {
+        console.error('Failed to fetch dashboard data', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
 
   const today = new Date();
   const dateStr = today.toLocaleDateString("en-IN", {
@@ -72,10 +93,10 @@ export function DashboardPage() {
         {/* Row 2 — Expenses + Budget */}
         <div className="grid grid-cols-5 gap-5 mt-6">
           <div className="col-span-3">
-            <RecentExpenses />
+            <RecentExpenses expenses={expenses} loading={loading} />
           </div>
           <div className="col-span-2">
-            <BudgetOverview />
+            <BudgetOverview currentScore={healthScore} loading={loading} />
           </div>
         </div>
 
@@ -90,7 +111,7 @@ export function DashboardPage() {
         </div>
 
         {/* Warning banner (shows if health score < 50) */}
-        {healthScore < 50 && (
+        {healthScore !== null && healthScore < 50 && (
           <div
             className="flex items-center gap-3 px-6 py-4 rounded-2xl mt-6"
             style={{
