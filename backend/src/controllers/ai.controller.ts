@@ -33,17 +33,10 @@ export const purchaseAdvisor = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    const systemPrompt = `
-      You are Clutch, a warm, intelligent, and non-judgmental AI money coach for students and young adults.
-      Your goal is to act as a decision-support system. Evaluate the user's desired purchase based on their current financial reality.
-      
-      User's real-time financial context:
-      ${JSON.stringify(financialContext, null, 2)}
-      
-      Analyze if they can afford this purchase without compromising their remaining month.
-      Respond strictly in JSON format with exactly these keys: "verdict" (must be "YES", "MAYBE", or "NO"), "explanation" (2-3 sentences plain-English reasoning), and "tip" (one constructive suggestion).
-      Do not include any other text outside the JSON object.
-    `;
+    // Static persona — eligible for prompt caching (Lever #1)
+    const staticSystemPrompt = `You are Clutch, a warm, intelligent, and non-judgmental AI money coach for students and young adults. Your goal is to act as a decision-support system. Evaluate the user's desired purchase based on their current financial reality.`;
+
+    const dynamicSystemPrompt = `\n\nUser's real-time financial context:\n${JSON.stringify(financialContext, null, 2)}\n\nAnalyze if they can afford this purchase without compromising their remaining month. Respond strictly in JSON format with exactly these keys: "verdict" (must be "YES", "MAYBE", or "NO"), "explanation" (2-3 sentences plain-English reasoning), and "tip" (one constructive suggestion). Do not include any other text outside the JSON object.`;
 
     const userPrompt = `I want to buy: ${itemDescription} for ₹${amount}. Should I buy this?`;
 
@@ -51,9 +44,19 @@ export const purchaseAdvisor = async (req: AuthRequest, res: Response): Promise<
       model: CLAUDE_MODEL,
       max_tokens: 300,
       temperature: 0.2,
-      system: systemPrompt,
+      system: [
+        {
+          type: "text",
+          text: staticSystemPrompt,
+          cache_control: { type: "ephemeral" }, // Lever #1: cache static persona
+        },
+        {
+          type: "text",
+          text: dynamicSystemPrompt,
+        },
+      ],
       messages: [{ role: "user", content: userPrompt }],
-    });
+    } as Parameters<typeof anthropic.messages.create>[0]);
 
     const textResponse = (response.content[0] as { type: string; text: string }).text;
     const aiDecision = JSON.parse(textResponse);

@@ -61,6 +61,13 @@ CREATE TABLE weekly_reviews (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE batch_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    batch_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'processing', -- processing, completed, failed
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Micro-Challenges
 CREATE TABLE challenges (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
