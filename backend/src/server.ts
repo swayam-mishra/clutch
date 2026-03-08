@@ -9,6 +9,8 @@ import authRoutes from "./routes/auth.routes";
 import insightsRoutes from "./routes/insights.routes";
 import goalsRoutes from "./routes/goals.routes";
 import notificationsRoutes from "./routes/notifications.routes";
+import challengesRoutes from "./routes/challenges.routes";
+import splitsRoutes from "./routes/splits.routes";
 import { initCronJobs } from "./jobs/nudge.cron";
 
 dotenv.config();
@@ -34,6 +36,8 @@ app.use("/api/health-score", healthScoreRoutes);
 app.use("/api/insights", insightsRoutes);
 app.use("/api/goals", goalsRoutes);
 app.use("/api/notifications", notificationsRoutes);
+app.use("/api/challenges", challengesRoutes);
+app.use("/api/splits", splitsRoutes);
 
 // Start server
 app.listen(PORT, () => {
