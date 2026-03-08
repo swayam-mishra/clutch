@@ -68,6 +68,11 @@ CREATE TABLE batch_jobs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Indexes for hot query paths
+CREATE INDEX IF NOT EXISTS idx_expenses_user_month ON expenses(user_id, DATE_TRUNC('month', date));
+CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(user_id, category);
+CREATE INDEX IF NOT EXISTS idx_budgets_user_month ON budgets(user_id, month);
+
 -- Micro-Challenges
 CREATE TABLE challenges (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

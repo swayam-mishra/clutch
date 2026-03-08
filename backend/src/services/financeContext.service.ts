@@ -1,4 +1,12 @@
 import pool from "../config/db";
+import NodeCache from "node-cache";
+
+// 5-minute TTL; entries are invalidated immediately on data mutation
+const budgetCache = new NodeCache({ stdTTL: 300 });
+
+export const invalidateBudgetCache = (userId: string): void => {
+  budgetCache.del(`finance_context_${userId}`);
+};
 
 export interface CategoryStatus {
   category: string;
@@ -29,6 +37,10 @@ export interface FinancialContext {
 }
 
 export const buildFinancialContext = async (userId: string): Promise<FinancialContext | null> => {
+  const cacheKey = `finance_context_${userId}`;
+  const cached = budgetCache.get<FinancialContext>(cacheKey);
+  if (cached) return cached;
+
   const now = new Date();
   const year = now.getFullYear();
   const monthNum = now.getMonth() + 1; // 1-12
@@ -142,4 +154,7 @@ export const buildFinancialContext = async (userId: string): Promise<FinancialCo
       percentageChange
     }
   };
+
+  budgetCache.set(cacheKey, result);
+  return result;
 };

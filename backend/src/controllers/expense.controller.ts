@@ -1,6 +1,7 @@
 import { Response } from "express";
 import pool from "../config/db";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { invalidateBudgetCache } from "../services/financeContext.service";
 
 // POST /api/expenses — Log a new expense
 export const createExpense = async (req: AuthRequest, res: Response) => {
@@ -34,6 +35,7 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
     ];
 
     const result = await pool.query(query, values);
+    if (userId) invalidateBudgetCache(userId);
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Error creating expense:", error);
@@ -266,8 +268,7 @@ export const updateExpense = async (req: AuthRequest, res: Response) => {
       RETURNING *;
     `;
 
-    const result = await pool.query(query, params);
-    res.json(result.rows[0]);
+    const result = await pool.query(query, params);    if (userId) invalidateBudgetCache(userId);    res.json(result.rows[0]);
   } catch (error) {
     console.error("Error updating expense:", error);
     res.status(500).json({
@@ -300,6 +301,7 @@ export const deleteExpense = async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    if (userId) invalidateBudgetCache(userId);
     res.json({ message: "Expense deleted successfully." });
   } catch (error) {
     console.error("Error deleting expense:", error);
