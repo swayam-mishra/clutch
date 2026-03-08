@@ -88,6 +88,18 @@ A concise narrative summary covering:
 
 No spreadsheets. No noise.
 
+### Micro-Challenges
+
+* Short, targeted spending challenges (e.g. "Spend under ₹500 on food this week")
+* Tracks real-time progress against each challenge
+* Builds habits through achievable goals
+
+### Expense Splits
+
+* Split any expense with friends or contacts
+* Track who owes what and mark settlements
+* Attached directly to individual expense records
+
 ---
 
 ## How Clutch Is Different
@@ -99,6 +111,97 @@ No spreadsheets. No noise.
 | Historical data      | Predictive insights     |
 | Charts & dashboards  | Explanations & guidance |
 | User interprets      | System interprets       |
+
+---
+
+## Tech Stack
+
+| Layer     | Technology                                 |
+| --------- | ------------------------------------------ |
+| Runtime   | Node.js + TypeScript                       |
+| Framework | Express.js v5                              |
+| Database  | PostgreSQL                                 |
+| AI        | Anthropic Claude (`@anthropic-ai/sdk`)     |
+| Auth      | Firebase Admin SDK + JWT + bcrypt          |
+| Push      | Firebase Cloud Messaging (device tokens)   |
+| Scheduler | `node-cron` (nudge & review jobs)          |
+| Dev tools | `ts-node-dev`, `nodemon`, TypeScript 5     |
+
+---
+
+## Project Structure
+
+```
+Clutch/
+├── init.sql                  # Database schema (PostgreSQL)
+├── package.json              # Root-level shared dependencies
+└── backend/
+    ├── package.json
+    ├── tsconfig.json
+    └── src/
+        ├── server.ts         # Express app entry point
+        ├── config/
+        │   ├── ai.ts         # Anthropic client setup
+        │   └── db.ts         # PostgreSQL pool setup
+        ├── controllers/      # Route handler logic
+        │   ├── ai.controller.ts
+        │   ├── auth.controller.ts
+        │   ├── budget.controller.ts
+        │   ├── challenges.controller.ts
+        │   ├── expense.controller.ts
+        │   ├── goals.controller.ts
+        │   ├── healthScore.controller.ts
+        │   ├── insights.controller.ts
+        │   ├── notifications.controller.ts
+        │   └── splits.controller.ts
+        ├── jobs/
+        │   └── nudge.cron.ts # Scheduled nudge & review tasks
+        ├── middleware/
+        │   └── auth.middleware.ts
+        ├── routes/           # Express router definitions
+        └── services/
+            ├── financeContext.service.ts
+            └── healthScore.service.ts
+```
+
+---
+
+## API Reference
+
+All routes are prefixed with `/api`.
+
+| Method          | Endpoint          | Description                             |
+| --------------- | ----------------- | --------------------------------------- |
+| GET             | `/health`         | Server health check                     |
+| POST            | `/auth/...`       | Register, login, token refresh          |
+| GET/POST/DELETE | `/expenses`       | Log, fetch, and delete expenses         |
+| GET/POST        | `/budget`         | Read and set monthly budgets            |
+| POST            | `/ai/ask`         | "Should I buy this?" AI advisor         |
+| POST            | `/ai/review`      | Generate weekly money review            |
+| GET             | `/health-score`   | Fetch latest financial health score     |
+| GET             | `/insights`       | Predictive spending insights            |
+| GET/POST        | `/goals`          | Manage savings goals                    |
+| GET             | `/notifications`  | Fetch user notifications                |
+| GET/POST        | `/challenges`     | Browse and join micro-challenges        |
+| GET/POST        | `/splits`         | Create and manage expense splits        |
+
+---
+
+## Database Schema
+
+Core tables defined in `init.sql`:
+
+| Table             | Purpose                                           |
+| ----------------- | ------------------------------------------------- |
+| `users`           | User profiles, income, currency, preferences      |
+| `expenses`        | Individual expense records with mood tags         |
+| `budgets`         | Monthly budgets with per-category JSONB limits    |
+| `savings_goals`   | Savings targets with deadlines and contributions  |
+| `health_scores`   | Computed financial health scores with explanation |
+| `weekly_reviews`  | AI-generated weekly narrative summaries           |
+| `challenges`      | Challenge definitions (title, category, duration) |
+| `user_challenges` | Per-user challenge enrollment and progress        |
+| `splits`          | Split records linked to expenses                  |
 
 ---
 
@@ -119,35 +222,77 @@ Clutch prioritizes guidance over restriction, helping users build confidence aro
 
 ---
 
-## Tech Stack (Planned)
+## Getting Started
 
-**Frontend**
+### Prerequisites
 
-* Modern React-based UI
-* Mobile-first, minimal, text-forward design
+* Node.js 18+
+* PostgreSQL 14+
+* An [Anthropic API key](https://console.anthropic.com/)
+* A Firebase project with Admin SDK credentials
 
-**Backend**
+### 1. Clone the repo
 
-* API-driven architecture
-* AI-powered reasoning layer for insights and decisions
+```bash
+git clone https://github.com/your-username/clutch.git
+cd clutch
+```
 
-**AI**
+### 2. Set up the database
 
-* Behavioral analysis
-* Predictive spending models
-* Natural-language explanations
+```bash
+psql -U postgres -c "CREATE DATABASE clutch;"
+psql -U postgres -d clutch -f init.sql
+```
 
-> Note: This repository is under active development. Architecture and implementation details may evolve.
+### 3. Configure environment variables
 
----
+Create `backend/.env`:
 
-## Project Status
+```env
+# Server
+PORT=3001
 
-🚧 Early-stage development
-This repo currently focuses on:
+# PostgreSQL
+DATABASE_URL=postgresql://postgres:password@localhost:5432/clutch
 
-* Product definition
-* UX direction
-* Frontend foundation
+# Anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+
+# JWT
+JWT_SECRET=your_jwt_secret
+
+# Firebase Admin SDK
+FIREBASE_PROJECT_ID=your_project_id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk@...iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+```
+
+### 4. Install dependencies
+
+```bash
+# Root
+npm install
+
+# Backend
+cd backend && npm install
+```
+
+### 5. Run the development server
+
+```bash
+cd backend
+npm run dev
+```
+
+The server starts at `http://localhost:3001`. Confirm it is running by hitting `/api/health`.
+
+### Build for production
+
+```bash
+cd backend
+npm run build   # Compiles TypeScript → dist/
+npm start       # Runs dist/server.js
+```
 
 ---
