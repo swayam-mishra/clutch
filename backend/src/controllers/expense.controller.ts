@@ -2,22 +2,76 @@ import { Response } from "express";
 import pool from "../config/db";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { invalidateBudgetCache } from "../services/financeContext.service";
+import anthropic from "../config/ai";
 
-// POST /api/expenses — Log a new expense
+const BASE_CATEGORIES = [
+  "Food & Dining",
+  "Transport",
+  "Utilities",
+  "Housing",
+  "Health & Fitness",
+  "Entertainment",
+  "Shopping",
+  "Education",
+  "Travel",
+  "Miscellaneous",
+];
+
+const autoCategorizeExpense = async (description: string, amount: number): Promise<string> => {
+  try {
+    const prompt = `You are a financial categorization bot. Categorize the following expense into EXACTLY ONE of the predefined categories.
+
+Predefined Categories: ${BASE_CATEGORIES.join(", ")}
+
+Expense Description: "${description}"
+Expense Amount: ₹${amount}
+
+Rules:
+- Respond ONLY with the exact name of the category from the list above.
+- Do not include any punctuation, explanation, or conversational text.
+- If unsure, output "Miscellaneous".`;
+
+    const response = await anthropic.messages.create({
+      model: "claude-3-haiku-20240307",
+      max_tokens: 10,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const predicted = (response.content[0] as { type: string; text: string }).text.trim();
+    return BASE_CATEGORIES.includes(predicted) ? predicted : "Miscellaneous";
+  } catch (error) {
+    console.error("AI categorization failed:", error);
+    return "Miscellaneous";
+  }
+};
+
+// POST /api/expenses — Log a new expense (with auto-categorization)
 export const createExpense = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const { amount, category, description, date, moodTag } = req.body;
 
-    if (!userId || !amount || !category) {
+    if (!userId || !amount) {
       res.status(400).json({
         error: true,
         code: "VALIDATION_ERROR",
-        message: "amount and category are required.",
+        message: "amount is required.",
         statusCode: 400,
       });
       return;
     }
+
+    if (!category && !description) {
+      res.status(400).json({
+        error: true,
+        code: "VALIDATION_ERROR",
+        message: "Provide either a category or a description to auto-categorize.",
+        statusCode: 400,
+      });
+      return;
+    }
+
+    const finalCategory = category ?? await autoCategorizeExpense(description, parseFloat(amount));
 
     const query = `
       INSERT INTO expenses (user_id, amount, category, description, date, mood_tag)
@@ -28,7 +82,7 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
     const values = [
       userId,
       parseFloat(amount),
-      category,
+      finalCategory,
       description || null,
       date ? new Date(date) : new Date(),
       moodTag || null,
@@ -36,7 +90,10 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
 
     const result = await pool.query(query, values);
     if (userId) invalidateBudgetCache(userId);
-    res.status(201).json(result.rows[0]);
+    res.status(201).json({
+      ...result.rows[0],
+      autoCategorized: !category,
+    });
   } catch (error) {
     console.error("Error creating expense:", error);
     res.status(500).json({

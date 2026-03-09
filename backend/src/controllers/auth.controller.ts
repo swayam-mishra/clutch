@@ -90,25 +90,3 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
     res.status(500).json({ error: true, message: "Failed to update profile." });
   }
 };
-
-// PUT /api/auth/me
-export const updateMe = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const userId = req.user?.id;
-    const { name, monthlyIncome, currency } = req.body;
-
-    const query = `
-      UPDATE users 
-      SET name = COALESCE($1, name), 
-          monthly_income = COALESCE($2, monthly_income), 
-          currency = COALESCE($3, currency)
-      WHERE id = $4
-      RETURNING id, name, email, monthly_income, currency;
-    `;
-    
-    const result = await pool.query(query, [name, monthlyIncome, currency, userId]);
-    res.json(result.rows[0]);
-  } catch (error) {
-    res.status(500).json({ error: true, message: "Failed to update profile." });
-  }
-};
