@@ -49,7 +49,7 @@ Rules:
 export const createExpense = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { amount, category, description, date, moodTag } = req.body;
+    const { amount, category, description, date } = req.body;
 
     if (!userId || !amount) {
       res.status(400).json({
@@ -71,11 +71,11 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const finalCategory = category ?? await autoCategorizeExpense(description, parseFloat(amount));
+    const finalCategory = category || await autoCategorizeExpense(description, parseFloat(amount));
 
     const query = `
-      INSERT INTO expenses (user_id, amount, category, description, date, mood_tag)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO expenses (user_id, amount, category, description, date)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *;
     `;
 
@@ -85,7 +85,6 @@ export const createExpense = async (req: AuthRequest, res: Response) => {
       finalCategory,
       description || null,
       date ? new Date(date) : new Date(),
-      moodTag || null,
     ];
 
     const result = await pool.query(query, values);
@@ -265,7 +264,7 @@ export const updateExpense = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
-    const { amount, category, description, date, moodTag } = req.body;
+    const { amount, category, description, date } = req.body;
 
     // Check existence and ownership
     const existing = await pool.query(
@@ -303,11 +302,6 @@ export const updateExpense = async (req: AuthRequest, res: Response) => {
       setClauses.push(`date = $${paramIdx++}`);
       params.push(new Date(date));
     }
-    if (moodTag !== undefined) {
-      setClauses.push(`mood_tag = $${paramIdx++}`);
-      params.push(moodTag);
-    }
-
     if (setClauses.length === 0) {
       res.status(400).json({
         error: true,

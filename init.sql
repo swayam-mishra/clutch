@@ -33,7 +33,6 @@ CREATE TABLE expenses (
     category TEXT NOT NULL,
     description TEXT,
     date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    mood_tag TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

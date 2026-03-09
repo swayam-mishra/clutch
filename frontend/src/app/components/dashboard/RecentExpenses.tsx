@@ -53,8 +53,6 @@ export interface Expense {
   category: string;
   categoryColor?: string;
   amount: string | number;
-  mood?: string;
-  mood_tag?: string;
   [key: string]: unknown;
 }
 
