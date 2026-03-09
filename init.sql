@@ -1,14 +1,30 @@
 -- init.sql
 CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- id references Supabase's internal auth.users table
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     monthly_income NUMERIC DEFAULT 0,
     currency TEXT DEFAULT 'INR',
     notifications_enabled BOOLEAN DEFAULT true,
     weekly_review_day TEXT DEFAULT 'Sunday',
+    device_token TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Trigger to auto-insert a user profile on Supabase signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.users (id, email, name)
+  VALUES (new.id, new.email, COALESCE(new.raw_user_meta_data->>'name', 'User'));
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
 CREATE TABLE expenses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -49,9 +65,6 @@ CREATE TABLE health_scores (
     explanation TEXT NOT NULL,
     computed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-
-ALTER TABLE users ADD COLUMN password_hash TEXT;
-ALTER TABLE users ADD COLUMN device_token TEXT;
 
 CREATE TABLE weekly_reviews (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
