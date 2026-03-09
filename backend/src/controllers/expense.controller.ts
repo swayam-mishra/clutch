@@ -54,7 +54,7 @@ export const getExpenses = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const { month, category, startDate, endDate, limit, offset } = req.query;
 
-    const take = limit ? parseInt(limit as string) : 20;
+    const take = limit ? parseInt(limit as string) : 10;
     const skip = offset ? parseInt(offset as string) : 0;
 
     // Build dynamic WHERE clause

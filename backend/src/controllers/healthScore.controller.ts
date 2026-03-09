@@ -47,6 +47,7 @@ export const getScoreHistory = async (req: AuthRequest, res: Response): Promise<
       [userId]
     );
 
+    res.set("Cache-Control", "private, max-age=300");
     res.json(result.rows);
   } catch (error) {
     console.error("Error fetching health score history:", error);

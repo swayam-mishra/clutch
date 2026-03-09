@@ -8,12 +8,15 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false // Required for Neon DB
-  }
+  },
+  max: 5,                      // Respect Neon free-tier connection limits
+  idleTimeoutMillis: 30000,    // Release idle connections after 30s
+  connectionTimeoutMillis: 2000, // Fail fast if connection takes > 2s
 });
 
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  // Prevent idle client drops from crashing the Node process
+  console.error('Unexpected error on idle database client', err);
 });
 
 export default pool;

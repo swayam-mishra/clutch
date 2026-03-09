@@ -15,6 +15,7 @@ export const getExpenseTrends = async (req: AuthRequest, res: Response): Promise
       ORDER BY week DESC;
     `;
     const result = await pool.query(query, [userId]);
+    res.set("Cache-Control", "private, max-age=300");
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: true, message: "Failed to fetch trends." });
@@ -34,6 +35,7 @@ export const getHabits = async (req: AuthRequest, res: Response): Promise<void> 
       ORDER BY frequency DESC;
     `;
     const result = await pool.query(query, [userId]);
+    res.set("Cache-Control", "private, max-age=300");
     res.json({ habits: result.rows });
   } catch (error) {
     res.status(500).json({ error: true, message: "Failed to analyze habits." });
@@ -69,6 +71,7 @@ export const getAnomalies = async (req: AuthRequest, res: Response): Promise<voi
       WHERE c.current_total > (p.avg_monthly_spend * 1.5);
     `;
     const result = await pool.query(query, [userId]);
+    res.set("Cache-Control", "private, max-age=300");
     res.json({ anomalies: result.rows });
   } catch (error) {
     res.status(500).json({ error: true, message: "Failed to fetch anomalies." });
@@ -93,6 +96,7 @@ export const getForecast = async (req: AuthRequest, res: Response): Promise<void
       runOutDate.setDate(context.projectedRunOutDay);
     }
 
+    res.set("Cache-Control", "private, max-age=300");
     res.json({
       currentBalance: context.remainingBudget,
       dailyAverageSpend: context.dailyVelocity,
@@ -119,6 +123,7 @@ export const getSubscriptions = async (req: AuthRequest, res: Response): Promise
       ORDER BY frequency DESC;
     `;
     const result = await pool.query(query, [userId]);
+    res.set("Cache-Control", "private, max-age=300");
     res.json({ subscriptions: result.rows });
   } catch (error) {
     res.status(500).json({ error: true, message: "Failed to detect subscriptions." });
