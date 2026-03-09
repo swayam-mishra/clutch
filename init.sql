@@ -81,7 +81,7 @@ CREATE TABLE batch_jobs (
 );
 
 -- Indexes for hot query paths
-CREATE INDEX IF NOT EXISTS idx_expenses_user_month ON expenses(user_id, DATE_TRUNC('month', date));
+CREATE INDEX IF NOT EXISTS idx_expenses_user_month ON expenses(user_id, DATE_TRUNC('month', date AT TIME ZONE 'UTC'));
 CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(user_id, category);
 CREATE INDEX IF NOT EXISTS idx_budgets_user_month ON budgets(user_id, month);
 
@@ -114,3 +114,50 @@ CREATE TABLE splits (
     is_settled BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ============================================================
+-- SECURITY: Enable Row Level Security on all tables
+-- Blocks direct access via the public Supabase API (anon key).
+-- The Node.js backend retains full access via the connection string.
+-- ============================================================
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE budgets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE savings_goals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE health_scores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE weekly_reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE batch_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE challenges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_challenges ENABLE ROW LEVEL SECURITY;
+ALTER TABLE splits ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================
+-- updated_at auto-updater for mutable tables
+-- ============================================================
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+ALTER TABLE budgets ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+CREATE TRIGGER update_budgets_modtime
+    BEFORE UPDATE ON budgets
+    FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+
+ALTER TABLE savings_goals ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+CREATE TRIGGER update_savings_goals_modtime
+    BEFORE UPDATE ON savings_goals
+    FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+
+ALTER TABLE user_challenges ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+CREATE TRIGGER update_user_challenges_modtime
+    BEFORE UPDATE ON user_challenges
+    FOR EACH ROW EXECUTE PROCEDURE update_modified_column();
+
+-- ============================================================
+-- Realtime: broadcast splits so frontends see instant settlements
+-- ============================================================
+ALTER PUBLICATION supabase_realtime ADD TABLE splits;

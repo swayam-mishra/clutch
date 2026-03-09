@@ -7,9 +7,9 @@ dotenv.config();
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false // Required for Neon DB
+    rejectUnauthorized: false // Required for Supabase external connections
   },
-  max: 5,                      // Respect Neon free-tier connection limits
+  max: 10,                     // Safe to bump up with Supabase connection pooling
   idleTimeoutMillis: 30000,    // Release idle connections after 30s
   connectionTimeoutMillis: 2000, // Fail fast if connection takes > 2s
 });

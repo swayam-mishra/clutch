@@ -27,6 +27,9 @@ Short, targeted spending challenges (e.g. "Keep food under ₹500 this week") to
 **Expense Splits**
 Split any expense with friends, track balances, and mark settlements — attached directly to the original expense.
 
+**AI Auto-Categorization**
+Skip selecting a category when logging an expense. Provide a description and Claude 3 Haiku classifies it instantly. The response includes an `autoCategorized` flag so the UI can prompt a one-tap correction if needed.
+
 **Push Notifications**
 Real-time budget alerts and weekly review nudges delivered to your device.
 
@@ -38,9 +41,9 @@ Real-time budget alerts and weekly review nudges delivered to your device.
 | -------- | --------------------------------- |
 | Frontend | React + TypeScript + Tailwind CSS |
 | Backend  | Node.js + Express + TypeScript    |
-| Database | PostgreSQL (Neon)                 |
+| Database | PostgreSQL (Supabase)             |
+| Auth     | Supabase Auth                     |
 | AI       | Anthropic Claude                  |
-| Auth     | JWT + bcrypt                      |
 | Push     | Firebase Cloud Messaging          |
 
 ---
@@ -50,7 +53,7 @@ Real-time budget alerts and weekly review nudges delivered to your device.
 ### Prerequisites
 
 - Node.js 18+
-- PostgreSQL 14+ (or a [Neon](https://neon.tech) connection string)
+- A [Supabase](https://supabase.com) project (free tier is fine)
 - An [Anthropic API key](https://console.anthropic.com/)
 - A Firebase project with Admin SDK credentials
 
@@ -59,27 +62,24 @@ Real-time budget alerts and weekly review nudges delivered to your device.
 ```bash
 git clone https://github.com/your-username/clutch.git
 cd clutch
-npm install
 cd backend && npm install
 cd ../frontend && npm install
 ```
 
 ### 2. Set up the database
 
-```bash
-psql -U postgres -c "CREATE DATABASE clutch;"
-psql -U postgres -d clutch -f init.sql
-```
+In the Supabase SQL Editor, run the contents of `init.sql`. This creates all tables and sets up the trigger that auto-creates a user profile on signup.
 
 ### 3. Configure environment variables
 
 Create `backend/.env`:
 
 ```env
-PORT=5000
-DATABASE_URL=postgresql://postgres:password@localhost:5432/clutch
+PORT=3001
+DATABASE_URL="postgres://postgres.[project]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres"
+SUPABASE_URL="https://[YOUR_PROJECT_ID].supabase.co"
+SUPABASE_ANON_KEY="your-anon-key"
 ANTHROPIC_API_KEY=sk-ant-...
-JWT_SECRET=your_jwt_secret
 FIREBASE_PROJECT_ID=your_project_id
 FIREBASE_CLIENT_EMAIL=firebase-adminsdk@...iam.gserviceaccount.com
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
@@ -88,7 +88,7 @@ FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY----
 Create `frontend/.env`:
 
 ```env
-VITE_API_URL=http://localhost:5000/api
+VITE_API_URL=http://localhost:3001/api
 ```
 
 ### 4. Run
@@ -104,7 +104,7 @@ cd backend && npm run dev:worker
 cd frontend && npm run dev
 ```
 
-The backend runs at `http://localhost:5000` and the frontend at `http://localhost:5173`.
+The backend runs at `http://localhost:3001` and the frontend at `http://localhost:5173`.
 
 ---
 
