@@ -23,6 +23,14 @@ app.use(cors());
 app.use(express.json());
 app.use(compression()); // Compress all responses (~70% bandwidth reduction)
 
+// Cache GET responses for 5 minutes at the browser level
+app.use((req, res, next) => {
+  if (req.method === 'GET') {
+    res.set('Cache-Control', 'private, max-age=300');
+  }
+  next();
+});
+
 // Health check
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Eye, EyeOff, Mail, Lock, User, DollarSign } from "lucide-react";
+import { apiClient } from '../services/apiClient';
 
 function HealthScoreCard() {
   return (
@@ -69,10 +70,30 @@ function HealthScoreCard() {
 
 function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const data = await apiClient('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      localStorage.setItem('clutch_token', data.token);
+      navigate('/dashboard');
+    } catch (error) {
+      alert((error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-5">
+    <form className="flex flex-col gap-5" onSubmit={handleLogin}>
       {/* Email */}
       <div className="flex flex-col gap-1.5">
         <label style={{ fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>Email</label>
@@ -83,9 +104,12 @@ function SignInForm() {
           <Mail size={18} color="#6C47FF" opacity={0.5} />
           <input
             type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             className="flex-1 bg-transparent outline-none"
             style={{ fontSize: 15, color: "#1A1A2E" }}
+            required
           />
         </div>
       </div>
@@ -109,9 +133,12 @@ function SignInForm() {
           <Lock size={18} color="#6C47FF" opacity={0.5} />
           <input
             type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             placeholder="Enter your password"
             className="flex-1 bg-transparent outline-none"
             style={{ fontSize: 15, color: "#1A1A2E" }}
+            required
           />
           <button
             type="button"
@@ -130,7 +157,8 @@ function SignInForm() {
 
       {/* Sign In button */}
       <button
-        onClick={() => navigate("/dashboard")}
+        type="submit"
+        disabled={loading}
         className="w-full py-3.5 rounded-xl text-white cursor-pointer transition-all hover:opacity-90 mt-1"
         style={{
           backgroundColor: "#6C47FF",
@@ -140,7 +168,7 @@ function SignInForm() {
           border: "none",
         }}
       >
-        Sign In
+        {loading ? "Signing In..." : "Sign In"}
       </button>
 
       {/* Divider */}
@@ -181,16 +209,43 @@ function SignInForm() {
         </svg>
         Google
       </button>
-    </div>
+    </form>
   );
 }
 
 function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [monthlyIncome, setMonthlyIncome] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const data = await apiClient('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          monthly_income: Number(monthlyIncome.replace(/,/g, '')),
+        }),
+      });
+      localStorage.setItem('clutch_token', data.token);
+      navigate('/dashboard');
+    } catch (error) {
+      alert((error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-5">
+    <form className="flex flex-col gap-5" onSubmit={handleRegister}>
       {/* Full Name */}
       <div className="flex flex-col gap-1.5">
         <label style={{ fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>Full Name</label>
@@ -201,9 +256,12 @@ function SignUpForm() {
           <User size={18} color="#6C47FF" opacity={0.5} />
           <input
             type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             placeholder="John Doe"
             className="flex-1 bg-transparent outline-none"
             style={{ fontSize: 15, color: "#1A1A2E" }}
+            required
           />
         </div>
       </div>
@@ -218,9 +276,12 @@ function SignUpForm() {
           <Mail size={18} color="#6C47FF" opacity={0.5} />
           <input
             type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             className="flex-1 bg-transparent outline-none"
             style={{ fontSize: 15, color: "#1A1A2E" }}
+            required
           />
         </div>
       </div>
@@ -235,9 +296,12 @@ function SignUpForm() {
           <Lock size={18} color="#6C47FF" opacity={0.5} />
           <input
             type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             placeholder="Create a strong password"
             className="flex-1 bg-transparent outline-none"
             style={{ fontSize: 15, color: "#1A1A2E" }}
+            required
           />
           <button
             type="button"
@@ -264,16 +328,20 @@ function SignUpForm() {
           <span style={{ fontSize: 16, fontWeight: 600, color: "#6C47FF", opacity: 0.6 }}>₹</span>
           <input
             type="text"
+            value={monthlyIncome}
+            onChange={(e) => setMonthlyIncome(e.target.value)}
             placeholder="50,000"
             className="flex-1 bg-transparent outline-none"
             style={{ fontSize: 15, color: "#1A1A2E" }}
+            required
           />
         </div>
       </div>
 
       {/* Create Account button */}
       <button
-        onClick={() => navigate("/dashboard")}
+        type="submit"
+        disabled={loading}
         className="w-full py-3.5 rounded-xl text-white cursor-pointer transition-all hover:opacity-90 mt-1"
         style={{
           backgroundColor: "#6C47FF",
@@ -283,7 +351,7 @@ function SignUpForm() {
           border: "none",
         }}
       >
-        Create Account
+        {loading ? "Creating Account..." : "Create Account"}
       </button>
 
       {/* Terms */}
@@ -298,7 +366,7 @@ function SignUpForm() {
         </a>
         .
       </p>
-    </div>
+    </form>
   );
 }
 
