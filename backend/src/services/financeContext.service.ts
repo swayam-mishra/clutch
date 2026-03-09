@@ -135,7 +135,7 @@ export const buildFinancialContext = async (userId: string): Promise<FinancialCo
   const prev7 = parseFloat(trendRes.rows[0].prev_7_days);
   const percentageChange = prev7 === 0 ? (last7 > 0 ? 100 : 0) : Math.round(((last7 - prev7) / prev7) * 100);
 
-  return {
+  const result: FinancialContext = {
     month: currentMonthStr,
     dayOfMonth,
     daysRemaining,
@@ -157,4 +157,4 @@ export const buildFinancialContext = async (userId: string): Promise<FinancialCo
 
   budgetCache.set(cacheKey, result);
   return result;
-};
+};  

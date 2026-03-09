@@ -3,7 +3,7 @@ import { apiClient } from '../../services/apiClient';
 import { Sparkles, AlertTriangle } from "lucide-react";
 import { DashboardSidebar } from "./DashboardSidebar";
 import { StatCards } from "./StatCards";
-import { RecentExpenses } from "./RecentExpenses";
+import { RecentExpenses, Expense } from "./RecentExpenses";
 import { BudgetOverview } from "./BudgetOverview";
 import { SpendTrajectory } from "./SpendTrajectory";
 import { ActiveGoals } from "./ActiveGoals";
@@ -12,7 +12,7 @@ import { AskClutchModal } from "./AskClutchModal";
 export function DashboardPage() {
   const [showAI, setShowAI] = useState(false);
   const [healthScore, setHealthScore] = useState<number | null>(null);
-  const [expenses, setExpenses] = useState<unknown[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

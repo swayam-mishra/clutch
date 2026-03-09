@@ -542,7 +542,7 @@ export function ChallengesPage() {
         </div>
 
         {/* ── Tabs ────────────────────────── */}
-        <div className="flex items-center gap-1 mb-6 p-1 rounded-xl inline-flex" style={{ backgroundColor: "#fff", boxShadow: "0 2px 8px rgba(108,71,255,0.06)" }}>
+        <div className="inline-flex items-center gap-1 mb-6 p-1 rounded-xl" style={{ backgroundColor: "#fff", boxShadow: "0 2px 8px rgba(108,71,255,0.06)" }}>
           {(["active", "available"] as const).map((t) => {
             const isActive = tab === t;
             const label = t === "active" ? "Active Challenges" : "Available Challenges";

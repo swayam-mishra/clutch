@@ -46,7 +46,25 @@ const expenses = [
   },
 ];
 
-export function RecentExpenses() {
+export interface Expense {
+  id: string | number;
+  date: string;
+  description: string;
+  category: string;
+  categoryColor?: string;
+  amount: string | number;
+  mood?: string;
+  mood_tag?: string;
+  [key: string]: unknown;
+}
+
+interface RecentExpensesProps {
+  expenses?: Expense[];
+  loading?: boolean;
+}
+
+export function RecentExpenses({ expenses: propExpenses, loading }: RecentExpensesProps = {}) {
+  const displayExpenses = propExpenses ?? expenses;
   return (
     <div
       className="p-6 flex flex-col gap-4 h-full"
@@ -81,7 +99,7 @@ export function RecentExpenses() {
           </tr>
         </thead>
         <tbody>
-          {expenses.map((exp) => (
+          {displayExpenses.map((exp) => (
             <tr
               key={exp.id}
               className="transition-colors"

@@ -10,7 +10,12 @@ const data = [
 const spent = 6200;
 const total = 15000;
 
-export function BudgetOverview() {
+interface BudgetOverviewProps {
+  currentScore?: number | null;
+  loading?: boolean;
+}
+
+export function BudgetOverview({ currentScore: _currentScore, loading: _loading }: BudgetOverviewProps = {}) {
   return (
     <div
       className="p-6 flex flex-col gap-4 h-full"
