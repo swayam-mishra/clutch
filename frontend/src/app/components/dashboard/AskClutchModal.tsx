@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { X, Sparkles, Lightbulb, RotateCcw, ArrowRight, Zap } from "lucide-react";
-import { apiClient } from '../../services/apiClient';
+import { X, Sparkles, Lightbulb, RotateCcw, Zap } from "lucide-react";
+import { useAI } from "../../../hooks/useAI";
 
 type Verdict = "YES" | "MAYBE" | "NO";
 type Phase = "input" | "loading" | "result";
@@ -14,55 +14,6 @@ interface VerdictResult {
   tip?: string;
 }
 
-// ─── Mock AI responses ─────────────────────────
-const mockResponses: Record<string, VerdictResult> = {
-  default_yes: {
-    verdict: "YES",
-    explanation:
-      "This looks like a reasonable purchase that fits within your current budget. Your spending this week is 18% below average, and this won't push any category over its limit.",
-    tip: "Consider waiting 24 hours before buying — if you still want it tomorrow, go for it!",
-  },
-  default_maybe: {
-    verdict: "MAYBE",
-    explanation:
-      "This purchase is borderline. You have the funds, but your Shopping category is already at 72% with 12 days left in the month. It could push you over budget.",
-    tip: "Check if there's a sale coming up. A 10-15% discount would make this a much easier YES.",
-  },
-  default_no: {
-    verdict: "NO",
-    explanation:
-      "This would put your monthly spending over budget by ₹2,400. Your Emergency Fund goal also needs ₹18,000 more, and this purchase directly competes with that priority.",
-    tip: "Try the 30-day rule: add it to a wishlist and revisit in 30 days. 60% of impulse buys lose their appeal.",
-  },
-};
-
-function getVerdictForInput(text: string): VerdictResult {
-  const lower = text.toLowerCase();
-  // Simulate smart responses based on keywords
-  if (
-    lower.includes("iphone") ||
-    lower.includes("macbook") ||
-    lower.includes("laptop") ||
-    lower.includes("ps5") ||
-    lower.includes("₹50") ||
-    lower.includes("₹80") ||
-    lower.includes("₹100")
-  ) {
-    return mockResponses.default_no;
-  }
-  if (
-    lower.includes("shoes") ||
-    lower.includes("headphone") ||
-    lower.includes("shirt") ||
-    lower.includes("₹2") ||
-    lower.includes("₹3") ||
-    lower.includes("course")
-  ) {
-    return mockResponses.default_maybe;
-  }
-  // Default to YES for smaller / generic items
-  return mockResponses.default_yes;
-}
 
 // ─── Verdict color map ─────────────────────────
 function getVerdictStyle(v: Verdict) {
@@ -177,25 +128,22 @@ function CategoryChip({
 export function AskClutchModal({ onClose }: { onClose: () => void }) {
   const [phase, setPhase] = useState<Phase>("input");
   const [query, setQuery] = useState("");
+  const [amount, setAmount] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [result, setResult] = useState<VerdictResult | null>(null);
-
-  const [error, setError] = useState<string | null>(null);
+  const { shouldIBuy } = useAI();
 
   const handleGetVerdict = async () => {
     if (!query.trim()) return;
     setPhase("loading");
-    setError(null);
     try {
-      const aiVerdict = await apiClient('/ai/ask', {
-        method: 'POST',
-        body: JSON.stringify({ query, category: selectedCategory }),
+      const aiVerdict = await shouldIBuy.mutateAsync({
+        itemDescription: query,
+        amount: parseFloat(amount) || 0,
       });
-      setResult(aiVerdict);
+      setResult({ verdict: aiVerdict.verdict, explanation: aiVerdict.explanation, tip: aiVerdict.tip });
       setPhase("result");
-    } catch (err) {
-      console.error('Ask Clutch failed:', err);
-      setError('Something went wrong. Please try again.');
+    } catch {
       setPhase("input");
     }
   };
@@ -203,6 +151,7 @@ export function AskClutchModal({ onClose }: { onClose: () => void }) {
   const handleReset = () => {
     setPhase("input");
     setQuery("");
+    setAmount("");
     setSelectedCategory(null);
     setResult(null);
   };
@@ -299,6 +248,31 @@ export function AskClutchModal({ onClose }: { onClose: () => void }) {
                 />
               </div>
 
+              {/* Amount input */}
+              <div className="flex flex-col gap-2">
+                <label style={{ fontSize: 13, fontWeight: 600, color: "rgba(26,26,46,0.5)" }}>
+                  How much does it cost?{" "}
+                  <span style={{ fontWeight: 400, color: "rgba(26,26,46,0.3)" }}>(optional)</span>
+                </label>
+                <input
+                  type="number"
+                  placeholder="e.g. 1499"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full px-5 py-3 rounded-xl outline-none"
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 500,
+                    color: "#1A1A2E",
+                    backgroundColor: "#F7F6FF",
+                    border: "1.5px solid rgba(108,71,255,0.1)",
+                    transition: "border-color 0.2s",
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(108,71,255,0.3)")}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(108,71,255,0.1)")}
+                />
+              </div>
+
               {/* Category chips */}
               <div className="flex flex-col gap-2.5">
                 <label style={{ fontSize: 13, fontWeight: 600, color: "rgba(26,26,46,0.5)" }}>
@@ -335,16 +309,6 @@ export function AskClutchModal({ onClose }: { onClose: () => void }) {
                 <Zap size={16} />
                 Get Verdict
               </button>
-
-              {/* Error message */}
-              {error && (
-                <p
-                  className="text-center"
-                  style={{ fontSize: 13, color: "#EF4444", lineHeight: 1.5 }}
-                >
-                  {error}
-                </p>
-              )}
 
               {/* Helper text */}
               <p

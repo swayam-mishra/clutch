@@ -15,8 +15,12 @@ import {
   EyeOff,
   Check,
   LogOut,
+  Loader2,
+  BellOff,
+  AlertTriangle,
 } from "lucide-react";
 import { DashboardSidebar } from "./DashboardSidebar";
+import { useNotifications } from "../../../hooks/useNotifications";
 
 // ─── Design tokens ─────────────────────────────
 const cardStyle: React.CSSProperties = {
@@ -26,12 +30,16 @@ const cardStyle: React.CSSProperties = {
 };
 
 // ─── Toggle Switch ─────────────────────────────
-function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+function Toggle({ on, onToggle, disabled }: { on: boolean; onToggle: () => void; disabled?: boolean }) {
   return (
     <button
-      onClick={onToggle}
-      className="relative w-11 h-6 rounded-full cursor-pointer border-none transition-all"
-      style={{ backgroundColor: on ? "#6C47FF" : "rgba(26,26,46,0.12)" }}
+      onClick={disabled ? undefined : onToggle}
+      className="relative w-11 h-6 rounded-full border-none transition-all"
+      style={{
+        backgroundColor: disabled ? "rgba(26,26,46,0.07)" : on ? "#6C47FF" : "rgba(26,26,46,0.12)",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.5 : 1,
+      }}
     >
       <div
         className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all"
@@ -146,8 +154,49 @@ function NavRow({
 }
 
 // ─── Main Page ─────────────────────────────────
+// ─── Push notification status badge ────────────
+function PushStatusBadge({ status }: { status: ReturnType<typeof useNotifications>["status"] }) {
+  if (status === "active") {
+    return (
+      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full"
+        style={{ fontSize: 11, fontWeight: 600, color: "#22C55E", backgroundColor: "rgba(34,197,94,0.08)" }}>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#22C55E" }} />
+        Active
+      </span>
+    );
+  }
+  if (status === "denied") {
+    return (
+      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full"
+        style={{ fontSize: 11, fontWeight: 600, color: "#EF4444", backgroundColor: "rgba(239,68,68,0.08)" }}>
+        <AlertTriangle size={10} />
+        Blocked
+      </span>
+    );
+  }
+  if (status === "unsupported") {
+    return (
+      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full"
+        style={{ fontSize: 11, fontWeight: 600, color: "#9CA3AF", backgroundColor: "rgba(156,163,175,0.08)" }}>
+        <BellOff size={10} />
+        Not supported
+      </span>
+    );
+  }
+  return null;
+}
+
 export function SettingsPage() {
-  const [pushNotifications, setPushNotifications] = useState(true);
+  const {
+    enabled: pushNotifications,
+    status: pushStatus,
+    isLoading: pushLoading,
+    permissionDenied,
+    unsupported,
+    enable: enablePush,
+    disable: disablePush,
+  } = useNotifications();
+
   const [emailDigest, setEmailDigest] = useState(true);
   const [spendAlerts, setSpendAlerts] = useState(true);
   const [goalReminders, setGoalReminders] = useState(false);
@@ -216,9 +265,28 @@ export function SettingsPage() {
             <SettingRow
               icon={Bell}
               label="Push Notifications"
-              description="Get alerts on your device"
+              description={
+                permissionDenied
+                  ? "Blocked in browser — open Site Settings to allow"
+                  : unsupported
+                    ? "Not supported in this browser"
+                    : "Get budget alerts and spend nudges on this device"
+              }
             >
-              <Toggle on={pushNotifications} onToggle={() => setPushNotifications(!pushNotifications)} />
+              <div className="flex items-center gap-2.5">
+                <PushStatusBadge status={pushStatus} />
+                {pushLoading ? (
+                  <div className="w-11 h-6 flex items-center justify-center">
+                    <Loader2 size={15} color="#6C47FF" className="animate-spin" />
+                  </div>
+                ) : (
+                  <Toggle
+                    on={pushNotifications}
+                    onToggle={pushNotifications ? disablePush : enablePush}
+                    disabled={unsupported || permissionDenied}
+                  />
+                )}
+              </div>
             </SettingRow>
             <SettingRow
               icon={Mail}

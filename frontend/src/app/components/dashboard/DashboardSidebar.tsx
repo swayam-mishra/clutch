@@ -8,10 +8,12 @@ import {
   Target,
   Trophy,
   Settings,
+  Users,
   ChevronRight,
   ChevronLeft,
 } from "lucide-react";
 import { ImageWithFallback } from "../figma/ImageWithFallback";
+import { useSplits } from "../../../hooks/useSplits";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -20,6 +22,7 @@ const navItems = [
   { icon: Lightbulb, label: "Insights", path: "/dashboard/insights" },
   { icon: Target, label: "Goals", path: "/dashboard/goals" },
   { icon: Trophy, label: "Challenges", path: "/dashboard/challenges" },
+  { icon: Users, label: "Splits", path: "/dashboard/splits" },
   { icon: Settings, label: "Settings", path: "/dashboard/settings" },
 ];
 
@@ -30,6 +33,7 @@ interface DashboardSidebarProps {
 export function DashboardSidebar({ activePage = "Dashboard" }: DashboardSidebarProps) {
   const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
+  const { pendingCount } = useSplits();
 
   return (
     <aside
@@ -77,7 +81,25 @@ export function DashboardSidebar({ activePage = "Dashboard" }: DashboardSidebarP
                 }}
                 title={!expanded ? item.label : undefined}
               >
-                <item.icon size={20} className="shrink-0" />
+                <div className="relative shrink-0">
+                  <item.icon size={20} />
+                  {item.label === "Splits" && pendingCount > 0 && (
+                    <span
+                      className="absolute -top-1.5 -right-1.5 flex items-center justify-center rounded-full"
+                      style={{
+                        minWidth: 16,
+                        height: 16,
+                        backgroundColor: "#6C47FF",
+                        color: "#fff",
+                        fontSize: 9,
+                        fontWeight: 700,
+                        padding: "0 3px",
+                      }}
+                    >
+                      {pendingCount > 9 ? "9+" : pendingCount}
+                    </span>
+                  )}
+                </div>
                 {expanded && (
                   <span
                     className="whitespace-nowrap"

@@ -8,9 +8,9 @@ import {
   Target,
   Sparkles,
   TrendingUp,
-  ChevronRight,
 } from "lucide-react";
 import { DashboardSidebar } from "./DashboardSidebar";
+import { useGoals, type Goal } from "../../../hooks/useGoals";
 
 // ─── Design tokens ─────────────────────────────
 const cardStyle: React.CSSProperties = {
@@ -19,62 +19,6 @@ const cardStyle: React.CSSProperties = {
   boxShadow: "0 2px 12px rgba(108,71,255,0.08)",
 };
 
-// ─── Types ─────────────────────────────────────
-interface Goal {
-  id: string;
-  name: string;
-  icon: string;
-  target: number;
-  saved: number;
-  deadline: string;
-  notes: string;
-  createdAt: string;
-}
-
-// ─── Mock Data ─────────────────────────────────
-const initialGoals: Goal[] = [
-  {
-    id: "emergency",
-    name: "Emergency Fund",
-    icon: "🛡️",
-    target: 50000,
-    saved: 18000,
-    deadline: "2026-06-30",
-    notes: "3 months of expenses as safety net.",
-    createdAt: "2026-01-15",
-  },
-  {
-    id: "laptop",
-    name: "New Laptop",
-    icon: "💻",
-    target: 80000,
-    saved: 52000,
-    deadline: "2026-09-15",
-    notes: "MacBook Air M4 for work.",
-    createdAt: "2025-12-01",
-  },
-  {
-    id: "goa",
-    name: "Goa Trip",
-    icon: "✈️",
-    target: 25000,
-    saved: 22500,
-    deadline: "2026-04-20",
-    notes: "Beach vacation with friends!",
-    createdAt: "2026-02-10",
-  },
-  {
-    id: "invest",
-    name: "Investment Fund",
-    icon: "📈",
-    target: 100000,
-    saved: 31000,
-    deadline: "2026-12-31",
-    notes: "Long-term equity fund contribution.",
-    createdAt: "2026-01-01",
-  },
-];
-
 // ─── Helper: format date ───────────────────────
 function formatDeadline(dateStr: string): string {
   const d = new Date(dateStr);
@@ -82,7 +26,7 @@ function formatDeadline(dateStr: string): string {
 }
 
 function daysLeft(dateStr: string): number {
-  const now = new Date("2026-03-08");
+  const now = new Date();
   const target = new Date(dateStr);
   const diff = target.getTime() - now.getTime();
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
@@ -174,6 +118,13 @@ function ContributionModal({
   );
 }
 
+// ─── Types for panel form ──────────────────────
+interface GoalFormData {
+  title: string;
+  target_amount: number;
+  deadline: string;
+}
+
 // ─── Side Panel: New / Edit Goal ───────────────
 function GoalPanel({
   open,
@@ -183,16 +134,15 @@ function GoalPanel({
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (goal: Omit<Goal, "id" | "saved" | "createdAt">) => void;
+  onSave: (goal: GoalFormData) => void;
   editGoal?: Goal | null;
 }) {
-  const [name, setName] = useState(editGoal?.name || "");
-  const [target, setTarget] = useState(editGoal?.target?.toString() || "");
+  const [name, setName] = useState(editGoal?.title || "");
+  const [target, setTarget] = useState(editGoal?.target_amount?.toString() || "");
   const [deadline, setDeadline] = useState(editGoal?.deadline || "");
-  const [notes, setNotes] = useState(editGoal?.notes || "");
 
   // Reset when editGoal changes
-  const resetKey = editGoal?.id || "new";
+  const resetKey = editGoal?.id?.toString() || "new";
 
   return (
     <>
@@ -303,27 +253,6 @@ function GoalPanel({
               />
             </div>
           </div>
-
-          {/* Notes */}
-          <div className="flex flex-col gap-2">
-            <label style={{ fontSize: 13, fontWeight: 600, color: "rgba(26,26,46,0.5)" }}>
-              Notes <span style={{ fontWeight: 400, color: "rgba(26,26,46,0.3)" }}>(optional)</span>
-            </label>
-            <textarea
-              placeholder="Why is this goal important to you?"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              className="w-full px-4 py-3 rounded-xl outline-none resize-none"
-              style={{
-                fontSize: 14,
-                fontWeight: 500,
-                color: "#1A1A2E",
-                backgroundColor: "#F7F6FF",
-                border: "1px solid rgba(108,71,255,0.08)",
-              }}
-            />
-          </div>
         </div>
 
         {/* Footer Button */}
@@ -331,17 +260,10 @@ function GoalPanel({
           <button
             onClick={() => {
               if (name && target && deadline) {
-                onSave({
-                  name,
-                  icon: editGoal?.icon || "🎯",
-                  target: Number(target),
-                  deadline,
-                  notes,
-                });
+                onSave({ title: name, target_amount: Number(target), deadline });
                 setName("");
                 setTarget("");
                 setDeadline("");
-                setNotes("");
                 onClose();
               }
             }}
@@ -415,8 +337,8 @@ function GoalCard({
   onContribute: () => void;
   onEdit: () => void;
 }) {
-  const percent = Math.min(Math.round((goal.saved / goal.target) * 100), 100);
-  const remaining = Math.max(goal.target - goal.saved, 0);
+  const percent = Math.min(Math.round((goal.saved_amount / goal.target_amount) * 100), 100);
+  const remaining = Math.max(goal.target_amount - goal.saved_amount, 0);
   const days = daysLeft(goal.deadline);
   const isAlmostDone = percent >= 90;
   const isComplete = percent >= 100;
@@ -440,13 +362,13 @@ function GoalCard({
                 : "linear-gradient(135deg, #EDE9FF, #F7F6FF)",
             }}
           >
-            <span style={{ fontSize: 24 }}>{goal.icon}</span>
+            <Target size={22} color={isComplete ? "#22C55E" : "#6C47FF"} strokeWidth={1.8} />
           </div>
           <div>
-            <h3 style={{ fontSize: 17, fontWeight: 700, color: "#1A1A2E" }}>{goal.name}</h3>
+            <h3 style={{ fontSize: 17, fontWeight: 700, color: "#1A1A2E" }}>{goal.title}</h3>
             <div className="flex items-center gap-2 mt-1">
               <span style={{ fontSize: 13, color: "rgba(26,26,46,0.45)" }}>
-                ₹{goal.target.toLocaleString()}
+                ₹{goal.target_amount.toLocaleString()}
               </span>
               <span style={{ fontSize: 13, color: "rgba(26,26,46,0.2)" }}>·</span>
               <span style={{ fontSize: 13, color: "rgba(26,26,46,0.45)" }}>
@@ -524,10 +446,10 @@ function GoalCard({
         {/* Amount label */}
         <div className="flex items-baseline gap-1">
           <span style={{ fontSize: 14, fontWeight: 600, color: "#1A1A2E" }}>
-            ₹{goal.saved.toLocaleString()}
+            ₹{goal.saved_amount.toLocaleString()}
           </span>
           <span style={{ fontSize: 13, color: "rgba(26,26,46,0.35)" }}>
-            saved of ₹{goal.target.toLocaleString()}
+            saved of ₹{goal.target_amount.toLocaleString()}
           </span>
         </div>
 
@@ -547,8 +469,8 @@ function GoalCard({
         )}
       </div>
 
-      {/* Notes (if any) */}
-      {goal.notes && (
+      {/* Monthly contribution hint */}
+      {goal.monthly_contribution && !isComplete && (
         <p
           className="px-3.5 py-2.5 rounded-xl"
           style={{
@@ -558,7 +480,7 @@ function GoalCard({
             lineHeight: 1.5,
           }}
         >
-          {goal.notes}
+          Monthly target: ₹{goal.monthly_contribution.toLocaleString()}
         </p>
       )}
 
@@ -615,10 +537,10 @@ function GoalCard({
 
 // ─── Summary Stats Bar ─────────────────────────
 function SummaryBar({ goals }: { goals: Goal[] }) {
-  const totalTarget = goals.reduce((s, g) => s + g.target, 0);
-  const totalSaved = goals.reduce((s, g) => s + g.saved, 0);
+  const totalTarget = goals.reduce((s, g) => s + g.target_amount, 0);
+  const totalSaved = goals.reduce((s, g) => s + g.saved_amount, 0);
   const overallPercent = totalTarget > 0 ? Math.round((totalSaved / totalTarget) * 100) : 0;
-  const completedCount = goals.filter((g) => g.saved >= g.target).length;
+  const completedCount = goals.filter((g) => g.saved_amount >= g.target_amount).length;
 
   const stats = [
     {
@@ -664,12 +586,12 @@ function SummaryBar({ goals }: { goals: Goal[] }) {
 
 // ─── Main Page ─────────────────────────────────
 export function GoalsPage() {
-  const [goals, setGoals] = useState<Goal[]>(initialGoals);
+  const { goals, isLoading, createGoal, updateGoal, contributeToGoal } = useGoals();
   const [panelOpen, setPanelOpen] = useState(false);
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
-  const [contribModal, setContribModal] = useState<{ open: boolean; goalId: string; goalName: string }>({
+  const [contribModal, setContribModal] = useState<{ open: boolean; goalId: number; goalName: string }>({
     open: false,
-    goalId: "",
+    goalId: 0,
     goalName: "",
   });
 
@@ -683,34 +605,16 @@ export function GoalsPage() {
     setPanelOpen(true);
   };
 
-  const handleSave = (data: Omit<Goal, "id" | "saved" | "createdAt">) => {
+  const handleSave = (data: { title: string; target_amount: number; deadline: string }) => {
     if (editGoal) {
-      setGoals((prev) =>
-        prev.map((g) =>
-          g.id === editGoal.id
-            ? { ...g, name: data.name, icon: data.icon, target: data.target, deadline: data.deadline, notes: data.notes }
-            : g
-        )
-      );
+      updateGoal.mutate({ id: editGoal.id, title: data.title, targetAmount: data.target_amount, deadline: data.deadline });
     } else {
-      const newGoal: Goal = {
-        ...data,
-        id: `goal-${Date.now()}`,
-        saved: 0,
-        createdAt: "2026-03-08",
-      };
-      setGoals((prev) => [...prev, newGoal]);
+      createGoal.mutate({ title: data.title, targetAmount: data.target_amount, deadline: data.deadline });
     }
   };
 
   const handleContribute = (amount: number) => {
-    setGoals((prev) =>
-      prev.map((g) =>
-        g.id === contribModal.goalId
-          ? { ...g, saved: Math.min(g.saved + amount, g.target) }
-          : g
-      )
-    );
+    contributeToGoal.mutate({ id: contribModal.goalId, amount });
   };
 
   return (
@@ -755,7 +659,11 @@ export function GoalsPage() {
           )}
         </div>
 
-        {goals.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-24">
+            <span style={{ fontSize: 14, color: "rgba(26,26,46,0.4)" }}>Loading goals…</span>
+          </div>
+        ) : goals.length === 0 ? (
           <EmptyState onCreate={openNewPanel} />
         ) : (
           <>
@@ -776,7 +684,7 @@ export function GoalsPage() {
                   key={goal.id}
                   goal={goal}
                   onContribute={() =>
-                    setContribModal({ open: true, goalId: goal.id, goalName: goal.name })
+                    setContribModal({ open: true, goalId: goal.id, goalName: goal.title })
                   }
                   onEdit={() => openEditPanel(goal)}
                 />

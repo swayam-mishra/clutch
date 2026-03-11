@@ -136,6 +136,60 @@ export const chatInterface = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
+// POST /api/ai/categorize
+export const categorizeExpense = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { description, amount } = req.body;
+
+    if (!description || amount === undefined) {
+      res.status(400).json({
+        error: true,
+        code: "VALIDATION_ERROR",
+        message: "description and amount are required.",
+        statusCode: 400,
+      });
+      return;
+    }
+
+    const BASE_CATEGORIES = [
+      "Food & Dining", "Transport", "Utilities", "Housing",
+      "Health & Fitness", "Entertainment", "Shopping",
+      "Education", "Travel", "Miscellaneous",
+    ];
+
+    const prompt = `You are a financial categorization bot. Categorize the following expense into EXACTLY ONE of the predefined categories.
+
+Predefined Categories: ${BASE_CATEGORIES.join(", ")}
+
+Expense Description: "${description}"
+Expense Amount: ₹${amount}
+
+Rules:
+- Respond ONLY with the exact name of the category from the list above.
+- Do not include any punctuation, explanation, or conversational text.
+- If unsure, output "Miscellaneous".`;
+
+    const response = await anthropic.messages.create({
+      model: "claude-3-haiku-20240307",
+      max_tokens: 10,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const predicted = (response.content[0] as { type: string; text: string }).text.trim();
+    const category = BASE_CATEGORIES.includes(predicted) ? predicted : "Miscellaneous";
+
+    res.json({ category });
+  } catch (error) {
+    console.error("Error in categorize:", error);
+    res.status(500).json({
+      error: true,
+      code: "AI_ERROR",
+      message: "Failed to categorize expense.",
+      statusCode: 500,
+    });
+  }
+};
+
 // GET /api/ai/weekly-review
 export const getWeeklyReview = async (req: AuthRequest, res: Response): Promise<void> => {
   try {

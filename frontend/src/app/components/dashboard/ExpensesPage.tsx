@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import {
   Plus,
   Search,
@@ -15,60 +15,37 @@ import {
   Heart,
   Home,
   GraduationCap,
+  Trash2,
+  Plane,
 } from "lucide-react";
 import { DashboardSidebar } from "./DashboardSidebar";
+import { useExpenses, type AddExpenseInput } from "../../../hooks/useExpenses";
+import { useAI } from "../../../hooks/useAI";
 
 // ─── Types ────────────────────────────────────
-interface Expense {
-  id: number;
-  date: string;
-  description: string;
-  category: string;
-  categoryColor: string;
-  mood: string;
-  amount: number;
-}
-
-// ─── Mock Data ────────────────────────────────
-const allExpenses: Expense[] = [
-  { id: 1, date: "2026-03-08", description: "Zomato — Biryani", category: "Food", categoryColor: "#F59E0B", mood: "😋", amount: 349 },
-  { id: 2, date: "2026-03-08", description: "Uber Ride to Office", category: "Transport", categoryColor: "#6C47FF", mood: "😐", amount: 185 },
-  { id: 3, date: "2026-03-07", description: "Amazon — USB Cable", category: "Shopping", categoryColor: "#EF4444", mood: "🤷", amount: 499 },
-  { id: 4, date: "2026-03-07", description: "Starbucks Coffee", category: "Food", categoryColor: "#F59E0B", mood: "☕", amount: 420 },
-  { id: 5, date: "2026-03-06", description: "Netflix Subscription", category: "Entertainment", categoryColor: "#22C55E", mood: "🎬", amount: 649 },
-  { id: 6, date: "2026-03-06", description: "Electricity Bill", category: "Utilities", categoryColor: "#3B82F6", mood: "😬", amount: 1200 },
-  { id: 7, date: "2026-03-05", description: "Gym Membership", category: "Health", categoryColor: "#EC4899", mood: "💪", amount: 999 },
-  { id: 8, date: "2026-03-05", description: "Swiggy — Pizza Night", category: "Food", categoryColor: "#F59E0B", mood: "🍕", amount: 580 },
-  { id: 9, date: "2026-03-04", description: "Metro Card Recharge", category: "Transport", categoryColor: "#6C47FF", mood: "😐", amount: 300 },
-  { id: 10, date: "2026-03-04", description: "Coursera Subscription", category: "Education", categoryColor: "#8B5CF6", mood: "📚", amount: 750 },
-  { id: 11, date: "2026-03-03", description: "Groceries — BigBasket", category: "Food", categoryColor: "#F59E0B", mood: "🛒", amount: 1450 },
-  { id: 12, date: "2026-03-03", description: "Ola Auto to Mall", category: "Transport", categoryColor: "#6C47FF", mood: "😊", amount: 120 },
-  { id: 13, date: "2026-03-02", description: "Nike Running Shoes", category: "Shopping", categoryColor: "#EF4444", mood: "😤", amount: 4999 },
-  { id: 14, date: "2026-03-02", description: "Spotify Premium", category: "Entertainment", categoryColor: "#22C55E", mood: "🎵", amount: 119 },
-  { id: 15, date: "2026-03-01", description: "Rent — March", category: "Housing", categoryColor: "#78716C", mood: "😬", amount: 12000 },
-  { id: 16, date: "2026-03-01", description: "Phone Bill", category: "Utilities", categoryColor: "#3B82F6", mood: "😐", amount: 499 },
-  { id: 17, date: "2026-03-01", description: "Chai Point — Team Outing", category: "Food", categoryColor: "#F59E0B", mood: "😊", amount: 240 },
-  { id: 18, date: "2026-02-28", description: "Myntra — T-Shirt", category: "Shopping", categoryColor: "#EF4444", mood: "💸", amount: 899 },
-];
 
 const categories = [
   { label: "All Categories", value: "all" },
-  { label: "Food", value: "Food", icon: Utensils, color: "#F59E0B" },
+  { label: "Food & Dining", value: "Food & Dining", icon: Utensils, color: "#F59E0B" },
   { label: "Transport", value: "Transport", icon: Car, color: "#6C47FF" },
   { label: "Shopping", value: "Shopping", icon: ShoppingBag, color: "#EF4444" },
   { label: "Entertainment", value: "Entertainment", icon: Gamepad2, color: "#22C55E" },
   { label: "Utilities", value: "Utilities", icon: Zap, color: "#3B82F6" },
-  { label: "Health", value: "Health", icon: Heart, color: "#EC4899" },
+  { label: "Health & Fitness", value: "Health & Fitness", icon: Heart, color: "#EC4899" },
   { label: "Housing", value: "Housing", icon: Home, color: "#78716C" },
   { label: "Education", value: "Education", icon: GraduationCap, color: "#8B5CF6" },
+  { label: "Travel", value: "Travel", icon: Plane, color: "#06B6D4" },
+  { label: "Miscellaneous", value: "Miscellaneous", icon: ShoppingBag, color: "#9CA3AF" },
 ];
+
+const categoryColorMap = Object.fromEntries(
+  categories.filter((c) => c.value !== "all").map((c) => [c.value, c.color]),
+);
 
 const months = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
-
-const moodOptions = ["😊", "😐", "😬", "😤", "💸"];
 
 const cardStyle = {
   backgroundColor: "#fff",
@@ -76,46 +53,78 @@ const cardStyle = {
   boxShadow: "0 2px 12px rgba(108,71,255,0.08)",
 };
 
+// ─── Skeleton ─────────────────────────────────
+function SkeletonRow() {
+  return (
+    <tr>
+      {[130, 240, 100, 80].map((w, i) => (
+        <td key={i} className="py-3.5 px-5">
+          <div
+            className="rounded-lg animate-pulse"
+            style={{ height: 14, width: w, backgroundColor: "rgba(108,71,255,0.06)" }}
+          />
+        </td>
+      ))}
+      <td className="py-3.5 px-5 text-right">
+        <div
+          className="rounded-lg animate-pulse ml-auto"
+          style={{ height: 14, width: 70, backgroundColor: "rgba(108,71,255,0.06)" }}
+        />
+      </td>
+    </tr>
+  );
+}
+
 // ─── Log Expense Panel ────────────────────────
 function LogExpensePanel({
   open,
   onClose,
   onSave,
+  isSaving,
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (expense: Expense) => void;
+  onSave: (input: AddExpenseInput) => void;
+  isSaving: boolean;
 }) {
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("Food");
+  const [category, setCategory] = useState("Food & Dining");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [mood, setMood] = useState("😊");
   const [catDropdownOpen, setCatDropdownOpen] = useState(false);
+  const { autoCategorize } = useAI();
+  // Prevent duplicate calls for the same description+amount pair
+  const lastCategorizedRef = useRef<string>("");
+
+  const handleDescriptionBlur = () => {
+    if (!description.trim() || !amount) return;
+    const key = `${description}:${amount}`;
+    if (lastCategorizedRef.current === key) return;
+    lastCategorizedRef.current = key;
+    autoCategorize.mutate(
+      { description: description.trim(), amount: parseFloat(amount) },
+      { onSuccess: (data) => setCategory(data.category) },
+    );
+  };
 
   const handleSave = () => {
     if (!amount || !description) return;
-    const cat = categories.find((c) => c.value === category);
     onSave({
-      id: Date.now(),
-      date,
+      amount: parseFloat(amount),
       description,
       category,
-      categoryColor: cat?.color || "#6C47FF",
-      mood,
-      amount: parseFloat(amount),
+      date,
     });
     setAmount("");
     setDescription("");
-    setCategory("Food");
+    setCategory("Food & Dining");
     setDate(new Date().toISOString().split("T")[0]);
-    setMood("😊");
+    lastCategorizedRef.current = "";
     onClose();
   };
 
   return (
     <>
-      {/* Backdrop */}
       {open && (
         <div
           className="fixed inset-0 z-[60]"
@@ -124,7 +133,6 @@ function LogExpensePanel({
         />
       )}
 
-      {/* Panel */}
       <div
         className="fixed top-0 right-0 h-screen z-[70] flex flex-col transition-transform duration-300"
         style={{
@@ -134,7 +142,6 @@ function LogExpensePanel({
           transform: open ? "translateX(0)" : "translateX(100%)",
         }}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: "1px solid rgba(108,71,255,0.06)" }}>
           <h3 style={{ fontSize: 18, fontWeight: 700, color: "#1A1A2E" }}>Log New Expense</h3>
           <button
@@ -146,7 +153,6 @@ function LogExpensePanel({
           </button>
         </div>
 
-        {/* Form */}
         <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-5">
           {/* Amount */}
           <div className="flex flex-col gap-2">
@@ -175,6 +181,7 @@ function LogExpensePanel({
               placeholder="What did you spend on?"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              onBlur={handleDescriptionBlur}
               className="px-4 py-3 rounded-xl outline-none"
               style={{
                 fontSize: 14,
@@ -187,7 +194,17 @@ function LogExpensePanel({
 
           {/* Category */}
           <div className="flex flex-col gap-2 relative">
-            <label style={{ fontSize: 13, fontWeight: 600, color: "rgba(26,26,46,0.5)" }}>Category</label>
+            <div className="flex items-center gap-2">
+              <label style={{ fontSize: 13, fontWeight: 600, color: "rgba(26,26,46,0.5)" }}>Category</label>
+              {autoCategorize.isPending && (
+                <span className="flex items-center gap-1" style={{ fontSize: 11, color: "#6C47FF", fontWeight: 500 }}>
+                  <svg className="animate-spin" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                  </svg>
+                  AI suggesting…
+                </span>
+              )}
+            </div>
             <button
               onClick={() => setCatDropdownOpen(!catDropdownOpen)}
               className="flex items-center justify-between px-4 py-3 rounded-xl cursor-pointer border-none"
@@ -270,35 +287,13 @@ function LogExpensePanel({
               />
             </div>
           </div>
-
-          {/* Mood Tag */}
-          <div className="flex flex-col gap-2">
-            <label style={{ fontSize: 13, fontWeight: 600, color: "rgba(26,26,46,0.5)" }}>Mood Tag</label>
-            <div className="flex items-center gap-3">
-              {moodOptions.map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMood(m)}
-                  className="w-11 h-11 rounded-xl flex items-center justify-center cursor-pointer border-none transition-all"
-                  style={{
-                    fontSize: 22,
-                    backgroundColor: mood === m ? "#EDE9FF" : "#F7F6FF",
-                    border: mood === m ? "2px solid #6C47FF" : "2px solid transparent",
-                    transform: mood === m ? "scale(1.1)" : "scale(1)",
-                  }}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-5 flex flex-col gap-3" style={{ borderTop: "1px solid rgba(108,71,255,0.06)" }}>
           <button
             onClick={handleSave}
-            className="w-full py-3.5 rounded-xl text-white cursor-pointer transition-all hover:opacity-90 border-none"
+            disabled={isSaving || !amount || !description}
+            className="w-full py-3.5 rounded-xl text-white cursor-pointer transition-all hover:opacity-90 border-none disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               backgroundColor: "#6C47FF",
               fontSize: 15,
@@ -306,7 +301,7 @@ function LogExpensePanel({
               boxShadow: "0 4px 20px rgba(108,71,255,0.25)",
             }}
           >
-            Save Expense
+            {isSaving ? "Saving…" : "Save Expense"}
           </button>
           <button
             onClick={onClose}
@@ -323,9 +318,9 @@ function LogExpensePanel({
 
 // ─── Main Expenses Page ───────────────────────
 export function ExpensesPage() {
-  const [expenses, setExpenses] = useState<Expense[]>(allExpenses);
   const [search, setSearch] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState(2); // March (0-indexed)
+  const [selectedYear] = useState(2026);
+  const [selectedMonth, setSelectedMonth] = useState(2); // 0-indexed, March
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [showPanel, setShowPanel] = useState(false);
@@ -333,23 +328,19 @@ export function ExpensesPage() {
   const [catFilterOpen, setCatFilterOpen] = useState(false);
   const perPage = 10;
 
+  const monthParam = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
+  const { expenses, isLoading, addExpense, removeExpense } = useExpenses({ month: monthParam });
+
   const filtered = useMemo(() => {
     return expenses.filter((e) => {
-      const matchesSearch = e.description.toLowerCase().includes(search.toLowerCase());
+      const matchesSearch = e.description?.toLowerCase().includes(search.toLowerCase());
       const matchesCategory = selectedCategory === "all" || e.category === selectedCategory;
-      const expMonth = new Date(e.date).getMonth();
-      const matchesMonth = expMonth === selectedMonth;
-      return matchesSearch && matchesCategory && matchesMonth;
+      return matchesSearch && matchesCategory;
     });
-  }, [expenses, search, selectedCategory, selectedMonth]);
+  }, [expenses, search, selectedCategory]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const paginated = filtered.slice((currentPage - 1) * perPage, currentPage * perPage);
-
-  const handleSave = (expense: Expense) => {
-    setExpenses((prev) => [expense, ...prev]);
-    setCurrentPage(1);
-  };
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -396,15 +387,10 @@ export function ExpensesPage() {
             <button
               onClick={() => { setMonthDropdownOpen(!monthDropdownOpen); setCatFilterOpen(false); }}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl cursor-pointer border-none transition-colors"
-              style={{
-                ...cardStyle,
-                fontSize: 14,
-                fontWeight: 500,
-                color: "#1A1A2E",
-              }}
+              style={{ ...cardStyle, fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}
             >
               <Calendar size={15} color="#6C47FF" />
-              {months[selectedMonth]} 2026
+              {months[selectedMonth]} {selectedYear}
               <ChevronDown size={14} color="rgba(26,26,46,0.3)" />
             </button>
             {monthDropdownOpen && (
@@ -443,12 +429,7 @@ export function ExpensesPage() {
             <button
               onClick={() => { setCatFilterOpen(!catFilterOpen); setMonthDropdownOpen(false); }}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl cursor-pointer border-none transition-colors"
-              style={{
-                ...cardStyle,
-                fontSize: 14,
-                fontWeight: 500,
-                color: "#1A1A2E",
-              }}
+              style={{ ...cardStyle, fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}
             >
               {selectedCategory === "all" ? "All Categories" : selectedCategory}
               <ChevronDown size={14} color="rgba(26,26,46,0.3)" />
@@ -488,9 +469,7 @@ export function ExpensesPage() {
           {/* Search */}
           <div
             className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl flex-1 min-w-[220px] max-w-sm"
-            style={{
-              ...cardStyle,
-            }}
+            style={cardStyle}
           >
             <Search size={16} color="rgba(26,26,46,0.3)" />
             <input
@@ -502,10 +481,7 @@ export function ExpensesPage() {
               style={{ fontSize: 14, color: "#1A1A2E", border: "none" }}
             />
             {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="cursor-pointer border-none bg-transparent p-0"
-              >
+              <button onClick={() => setSearch("")} className="cursor-pointer border-none bg-transparent p-0">
                 <X size={14} color="rgba(26,26,46,0.3)" />
               </button>
             )}
@@ -525,9 +501,9 @@ export function ExpensesPage() {
           <table className="w-full" style={{ borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid rgba(108,71,255,0.06)" }}>
-                {["Date", "Description", "Category", "Mood", "Amount"].map((h) => (
+                {["Date", "Description", "Category", "Amount", ""].map((h, i) => (
                   <th
-                    key={h}
+                    key={i}
                     className={`py-4 px-5 ${h === "Amount" ? "text-right" : "text-left"}`}
                     style={{ fontSize: 12, fontWeight: 600, color: "rgba(26,26,46,0.4)", textTransform: "uppercase", letterSpacing: "0.04em" }}
                   >
@@ -537,7 +513,9 @@ export function ExpensesPage() {
               </tr>
             </thead>
             <tbody>
-              {paginated.length === 0 ? (
+              {isLoading ? (
+                Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
+              ) : paginated.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="text-center py-16">
                     <p style={{ fontSize: 15, color: "rgba(26,26,46,0.3)", fontWeight: 500 }}>
@@ -546,44 +524,55 @@ export function ExpensesPage() {
                   </td>
                 </tr>
               ) : (
-                paginated.map((exp, idx) => (
-                  <tr
-                    key={exp.id}
-                    className="transition-colors cursor-default"
-                    style={{
-                      backgroundColor: idx % 2 === 1 ? "#FAFAFF" : "#fff",
-                      borderBottom: "1px solid rgba(108,71,255,0.03)",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#EDE9FF20")}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = idx % 2 === 1 ? "#FAFAFF" : "#fff")}
-                  >
-                    <td className="py-3.5 px-5" style={{ fontSize: 13, color: "rgba(26,26,46,0.5)", fontWeight: 500 }}>
-                      {formatDate(exp.date)}
-                    </td>
-                    <td className="py-3.5 px-5" style={{ fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>
-                      {exp.description}
-                    </td>
-                    <td className="py-3.5 px-5">
-                      <span
-                        className="px-3 py-1 rounded-full inline-block"
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: exp.categoryColor,
-                          backgroundColor: `${exp.categoryColor}12`,
-                        }}
-                      >
-                        {exp.category}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-5" style={{ fontSize: 20 }}>
-                      {exp.mood}
-                    </td>
-                    <td className="py-3.5 px-5 text-right" style={{ fontSize: 14, fontWeight: 600, color: "#EF4444" }}>
-                      -₹{exp.amount.toLocaleString()}
-                    </td>
-                  </tr>
-                ))
+                paginated.map((exp, idx) => {
+                  const color = categoryColorMap[exp.category] ?? "#9CA3AF";
+                  return (
+                    <tr
+                      key={exp.id}
+                      className="transition-colors group"
+                      style={{
+                        backgroundColor: idx % 2 === 1 ? "#FAFAFF" : "#fff",
+                        borderBottom: "1px solid rgba(108,71,255,0.03)",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#EDE9FF20")}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = idx % 2 === 1 ? "#FAFAFF" : "#fff")}
+                    >
+                      <td className="py-3.5 px-5" style={{ fontSize: 13, color: "rgba(26,26,46,0.5)", fontWeight: 500 }}>
+                        {formatDate(exp.date)}
+                      </td>
+                      <td className="py-3.5 px-5" style={{ fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>
+                        {exp.description}
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <span
+                          className="px-3 py-1 rounded-full inline-block"
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color,
+                            backgroundColor: `${color}12`,
+                          }}
+                        >
+                          {exp.category}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 text-right" style={{ fontSize: 14, fontWeight: 600, color: "#EF4444" }}>
+                        -₹{Number(exp.amount).toLocaleString()}
+                      </td>
+                      <td className="py-3.5 px-5 text-right">
+                        <button
+                          onClick={() => removeExpense.mutate(exp.id)}
+                          disabled={removeExpense.isPending}
+                          className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer border-none transition-all ml-auto"
+                          style={{ backgroundColor: "#FEF2F2", color: "#EF4444" }}
+                          title="Delete"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -594,8 +583,9 @@ export function ExpensesPage() {
             style={{ borderTop: "1px solid rgba(108,71,255,0.06)" }}
           >
             <span style={{ fontSize: 13, color: "rgba(26,26,46,0.4)" }}>
-              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * perPage + 1}–
-              {Math.min(currentPage * perPage, filtered.length)} of {filtered.length} expenses
+              {isLoading
+                ? "Loading…"
+                : `Showing ${filtered.length === 0 ? 0 : (currentPage - 1) * perPage + 1}–${Math.min(currentPage * perPage, filtered.length)} of ${filtered.length} expenses`}
             </span>
             <div className="flex items-center gap-2">
               <button
@@ -644,8 +634,12 @@ export function ExpensesPage() {
         </div>
       </main>
 
-      {/* Log Expense side panel */}
-      <LogExpensePanel open={showPanel} onClose={() => setShowPanel(false)} onSave={handleSave} />
+      <LogExpensePanel
+        open={showPanel}
+        onClose={() => setShowPanel(false)}
+        onSave={(input) => addExpense.mutate(input)}
+        isSaving={addExpense.isPending}
+      />
     </div>
   );
 }

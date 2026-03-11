@@ -1,68 +1,30 @@
-const expenses = [
-  {
-    id: 1,
-    date: "Mar 8",
-    description: "Zomato — Biryani",
-    category: "Food",
-    categoryColor: "#F59E0B",
-    amount: "₹349",
-    mood: "😋",
-  },
-  {
-    id: 2,
-    date: "Mar 7",
-    description: "Uber Ride to Office",
-    category: "Transport",
-    categoryColor: "#6C47FF",
-    amount: "₹185",
-    mood: "😐",
-  },
-  {
-    id: 3,
-    date: "Mar 7",
-    description: "Amazon — USB Cable",
-    category: "Shopping",
-    categoryColor: "#EF4444",
-    amount: "₹499",
-    mood: "🤷",
-  },
-  {
-    id: 4,
-    date: "Mar 6",
-    description: "Starbucks Coffee",
-    category: "Food",
-    categoryColor: "#F59E0B",
-    amount: "₹420",
-    mood: "☕",
-  },
-  {
-    id: 5,
-    date: "Mar 5",
-    description: "Netflix Subscription",
-    category: "Entertainment",
-    categoryColor: "#22C55E",
-    amount: "₹649",
-    mood: "🎬",
-  },
-];
+import { useExpenses } from "../../../hooks/useExpenses";
 
-export interface Expense {
-  id: string | number;
-  date: string;
-  description: string;
-  category: string;
-  categoryColor?: string;
-  amount: string | number;
-  [key: string]: unknown;
+const CATEGORY_COLORS: Record<string, string> = {
+  Food: "#F59E0B",
+  Transport: "#6C47FF",
+  Shopping: "#EF4444",
+  Entertainment: "#22C55E",
+  Health: "#06B6D4",
+  Utilities: "#8B5CF6",
+  Other: "#9CA3AF",
+};
+
+function getCategoryColor(category: string): string {
+  return CATEGORY_COLORS[category] ?? "#9CA3AF";
 }
 
-interface RecentExpensesProps {
-  expenses?: Expense[];
-  loading?: boolean;
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
 }
 
-export function RecentExpenses({ expenses: propExpenses, loading }: RecentExpensesProps = {}) {
-  const displayExpenses = propExpenses ?? expenses;
+const HEADERS = ["Date", "Description", "Category", "Amount"];
+
+export function RecentExpenses() {
+  const { expenses, isLoading } = useExpenses();
+  const recent = expenses.slice(0, 5);
+
   return (
     <div
       className="p-6 flex flex-col gap-4 h-full"
@@ -85,7 +47,7 @@ export function RecentExpenses({ expenses: propExpenses, loading }: RecentExpens
       <table className="w-full" style={{ borderCollapse: "separate", borderSpacing: "0 4px" }}>
         <thead>
           <tr>
-            {["Date", "Description", "Category", "Amount", "Mood"].map((h) => (
+            {HEADERS.map((h) => (
               <th
                 key={h}
                 className="text-left py-2 px-3"
@@ -97,41 +59,54 @@ export function RecentExpenses({ expenses: propExpenses, loading }: RecentExpens
           </tr>
         </thead>
         <tbody>
-          {displayExpenses.map((exp) => (
-            <tr
-              key={exp.id}
-              className="transition-colors"
-              style={{ borderRadius: 10 }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#F7F6FF")}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-            >
-              <td className="py-2.5 px-3 rounded-l-lg" style={{ fontSize: 13, color: "rgba(26,26,46,0.5)" }}>
-                {exp.date}
-              </td>
-              <td className="py-2.5 px-3" style={{ fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>
-                {exp.description}
-              </td>
-              <td className="py-2.5 px-3">
-                <span
-                  className="px-2.5 py-1 rounded-full"
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: exp.categoryColor,
-                    backgroundColor: `${exp.categoryColor}15`,
-                  }}
+          {isLoading
+            ? Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i} className="animate-pulse">
+                  {[0, 1, 2, 3].map((j) => (
+                    <td key={j} className="py-3 px-3">
+                      <div
+                        className="h-3 rounded-full"
+                        style={{
+                          width: j === 1 ? "80%" : j === 2 ? "60%" : "50%",
+                          backgroundColor: "rgba(108,71,255,0.07)",
+                        }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            : recent.map((exp) => (
+                <tr
+                  key={exp.id}
+                  className="transition-colors"
+                  style={{ borderRadius: 10 }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#F7F6FF")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                 >
-                  {exp.category}
-                </span>
-              </td>
-              <td className="py-2.5 px-3" style={{ fontSize: 14, fontWeight: 600, color: "#1A1A2E" }}>
-                {exp.amount}
-              </td>
-              <td className="py-2.5 px-3 rounded-r-lg" style={{ fontSize: 18 }}>
-                {exp.mood}
-              </td>
-            </tr>
-          ))}
+                  <td className="py-2.5 px-3 rounded-l-lg" style={{ fontSize: 13, color: "rgba(26,26,46,0.5)" }}>
+                    {formatDate(exp.date)}
+                  </td>
+                  <td className="py-2.5 px-3" style={{ fontSize: 14, fontWeight: 500, color: "#1A1A2E" }}>
+                    {exp.description}
+                  </td>
+                  <td className="py-2.5 px-3">
+                    <span
+                      className="px-2.5 py-1 rounded-full"
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: getCategoryColor(exp.category),
+                        backgroundColor: `${getCategoryColor(exp.category)}15`,
+                      }}
+                    >
+                      {exp.category}
+                    </span>
+                  </td>
+                  <td className="py-2.5 px-3 rounded-r-lg" style={{ fontSize: 14, fontWeight: 600, color: "#1A1A2E" }}>
+                    ₹{Number(exp.amount).toLocaleString("en-IN")}
+                  </td>
+                </tr>
+              ))}
         </tbody>
       </table>
     </div>
