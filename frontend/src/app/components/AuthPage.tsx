@@ -190,7 +190,7 @@ function SignUpForm() {
             name,
             email,
             password,
-            monthly_income: Number(monthlyIncome.replace(/,/g, "")),
+            monthlyIncome: Number(monthlyIncome.replace(/,/g, "")),
           }),
         }
       );

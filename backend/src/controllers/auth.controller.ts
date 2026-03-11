@@ -51,7 +51,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const result = await pool.query(
-      "SELECT id, name, email, monthly_income, currency FROM users WHERE id = $1",
+      "SELECT id, name, email, monthly_income AS \"monthlyIncome\", currency FROM users WHERE id = $1",
       [req.user?.id]
     );
     res.json(result.rows[0]);
@@ -76,12 +76,12 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
     const { name, monthlyIncome, currency } = req.body;
 
     const query = `
-      UPDATE users 
-      SET name = COALESCE($1, name), 
-          monthly_income = COALESCE($2, monthly_income), 
+      UPDATE users
+      SET name = COALESCE($1, name),
+          monthly_income = COALESCE($2, monthly_income),
           currency = COALESCE($3, currency)
       WHERE id = $4
-      RETURNING id, name, email, monthly_income, currency;
+      RETURNING id, name, email, monthly_income AS "monthlyIncome", currency;
     `;
 
     const result = await pool.query(query, [name, monthlyIncome, currency, userId]);

@@ -67,7 +67,7 @@ export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  monthly_income: number | null;
+  monthlyIncome: number | null;
   currency: string;
 }
 
