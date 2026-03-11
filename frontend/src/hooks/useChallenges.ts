@@ -5,7 +5,7 @@ import { apiFetch, ApiError } from "../lib/api";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ActiveChallenge {
-  user_challenge_id: number;
+  user_challenge_id: string;
   title: string;
   description: string;
   target_amount: number;
@@ -16,7 +16,7 @@ export interface ActiveChallenge {
 }
 
 export interface AvailableChallenge {
-  id: number;
+  id: string;
   title: string;
   description: string;
   target_amount: number;
@@ -26,7 +26,7 @@ export interface AvailableChallenge {
 }
 
 export interface ChallengeHistory {
-  user_challenge_id: number;
+  user_challenge_id: string;
   title: string;
   status: string;
   progress: number;
@@ -71,7 +71,7 @@ export function useChallenges() {
 
   // ── POST /:id/join ────────────────────────────────────────────────────────
   const joinChallenge = useMutation({
-    mutationFn: (challengeId: number) =>
+    mutationFn: (challengeId: string) =>
       apiFetch(`/api/challenges/${challengeId}/join`, { method: "POST" }),
     onSuccess: () => {
       invalidate();
@@ -82,7 +82,7 @@ export function useChallenges() {
 
   // ── PUT /:id/progress — mark complete ─────────────────────────────────────
   const markComplete = useMutation({
-    mutationFn: (userChallengeId: number) =>
+    mutationFn: (userChallengeId: string) =>
       apiFetch(`/api/challenges/${userChallengeId}/progress`, {
         method: "PUT",
         body: JSON.stringify({ markCompleted: true }),
@@ -96,7 +96,7 @@ export function useChallenges() {
 
   // ── PUT /:id/progress — add amount ────────────────────────────────────────
   const addProgress = useMutation({
-    mutationFn: ({ userChallengeId, amountAdded }: { userChallengeId: number; amountAdded: number }) =>
+    mutationFn: ({ userChallengeId, amountAdded }: { userChallengeId: string; amountAdded: number }) =>
       apiFetch(`/api/challenges/${userChallengeId}/progress`, {
         method: "PUT",
         body: JSON.stringify({ amountAdded }),

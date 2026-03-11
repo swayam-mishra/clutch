@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d/Resources/Projects/Clutch/frontend/**)",
+      "Bash(npm install @tanstack/react-query)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(node:*)",
+      "Bash(node_modules/.bin/tsc:*)",
+      "Bash(ls:*)",
+      "Bash(node_modules/.bin/vite build:*)"
+    ]
+  }
+}

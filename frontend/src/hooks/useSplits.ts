@@ -8,7 +8,7 @@ import { useAuthStore } from "../lib/authStore";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface Split {
-  split_id: number;
+  split_id: string;
   split_with_name: string;
   amount_owed: number;
   is_settled: boolean;
@@ -19,7 +19,7 @@ export interface Split {
 }
 
 export interface CreateSplitInput {
-  expenseId: number;
+  expenseId: string;
   splitWithName: string;
   amountOwed: number;
 }
@@ -39,7 +39,7 @@ export function useSplits() {
   const userId = useAuthStore((s) => s.user?.id);
   const queryKey = ["splits"] as const;
   // Track settled state to detect transitions for toast
-  const prevSettledIds = useRef<Set<number>>(new Set());
+  const prevSettledIds = useRef<Set<string>>(new Set());
 
   // ── GET ────────────────────────────────────────────────────────────────────
   const query = useQuery({

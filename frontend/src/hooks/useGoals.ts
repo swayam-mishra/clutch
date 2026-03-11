@@ -5,7 +5,7 @@ import { apiFetch, ApiError } from "../lib/api";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface Goal {
-  id: number;
+  id: string;
   user_id: string;
   title: string;
   target_amount: number;
@@ -22,7 +22,7 @@ export interface CreateGoalInput {
 }
 
 export interface UpdateGoalInput {
-  id: number;
+  id: string;
   title?: string;
   targetAmount?: number;
   deadline?: string;
@@ -83,7 +83,7 @@ export function useGoals() {
 
   // ── POST /:id/contribute (update saved_amount) ────────────────────────────
   const contributeToGoal = useMutation({
-    mutationFn: ({ id, amount }: { id: number; amount: number }) =>
+    mutationFn: ({ id, amount }: { id: string; amount: number }) =>
       apiFetch<Goal>(`/api/goals/${id}/contribute`, {
         method: "POST",
         body: JSON.stringify({ amount }),

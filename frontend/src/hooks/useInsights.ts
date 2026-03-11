@@ -17,6 +17,12 @@ export interface Habit {
   frequency: number;
 }
 
+export interface TrendRow {
+  week: string;   // ISO timestamp from date_trunc
+  category: string;
+  total: number;
+}
+
 const STALE_TIME = 10 * 60 * 1000; // 10 minutes
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -34,6 +40,12 @@ export function useInsights() {
     staleTime: STALE_TIME,
   });
 
+  const trendsQuery = useQuery({
+    queryKey: ["insights", "trends"],
+    queryFn: () => apiFetch<TrendRow[]>("/api/expenses/trends"),
+    staleTime: STALE_TIME,
+  });
+
   // Coerce postgres numeric strings to JS numbers
   const anomalies: Anomaly[] = (anomaliesQuery.data?.anomalies ?? []).map((a) => ({
     ...a,
@@ -48,10 +60,17 @@ export function useInsights() {
     frequency: Number(h.frequency),
   }));
 
+  const trends: TrendRow[] = (trendsQuery.data ?? []).map((t) => ({
+    ...t,
+    total: Number(t.total),
+  }));
+
   return {
     anomalies,
     habits,
+    trends,
     isLoading: anomaliesQuery.isLoading || habitsQuery.isLoading,
+    trendsLoading: trendsQuery.isLoading,
     isError: anomaliesQuery.isError || habitsQuery.isError,
   };
 }

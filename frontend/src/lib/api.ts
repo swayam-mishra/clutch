@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 
-const BASE_URL = "http://localhost:3001";
+const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
 export class ApiError extends Error {
   constructor(
@@ -22,17 +22,27 @@ async function getAuthHeaders(): Promise<HeadersInit> {
 export async function apiFetch<T = unknown>(
   path: string,
   init: RequestInit = {},
+  timeoutMs = 5000,
 ): Promise<T> {
   const authHeaders = await getAuthHeaders();
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders,
-      ...init.headers,
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+        ...init.headers,
+      },
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     let message: string;

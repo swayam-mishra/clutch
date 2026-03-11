@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch, ApiError } from "../lib/api";
 
@@ -31,6 +31,15 @@ export interface AutoCategorizeResult {
   category: string;
 }
 
+export interface WeeklyReview {
+  id: string;
+  user_id: string;
+  week_start_date: string;
+  summary: string;
+  highlights: string[];
+  created_at: string;
+}
+
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 function errorMessage(err: unknown): string {
@@ -61,5 +70,11 @@ export function useAI() {
     onError: (err) => toast.error(`Auto-categorize failed: ${errorMessage(err)}`),
   });
 
-  return { shouldIBuy, autoCategorize };
+  const weeklyReviewQuery = useQuery({
+    queryKey: ["ai", "weekly-review"],
+    queryFn: () => apiFetch<WeeklyReview>("/api/ai/weekly-review"),
+    retry: false, // 404 = no review yet, don't retry
+  });
+
+  return { shouldIBuy, autoCategorize, weeklyReview: weeklyReviewQuery };
 }

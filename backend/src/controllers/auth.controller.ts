@@ -42,7 +42,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     // data.session.access_token is what the frontend sends in the Bearer header
-    res.json({ user: data.user, token: data.session.access_token });
+    res.json({ user: data.user, token: data.session.access_token, refresh_token: data.session.refresh_token });
   } catch (error) {
     res.status(500).json({ error: true, message: "Server error during login." });
   }

@@ -26,7 +26,9 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { Alert, AlertTitle, AlertDescription } from "../ui/alert";
 import { DashboardSidebar } from "./DashboardSidebar";
-import { useInsights } from "../../../hooks/useInsights";
+import { useInsights, type TrendRow } from "../../../hooks/useInsights";
+import { useExpenseSummary } from "../../../hooks/useExpenses";
+import { useAI } from "../../../hooks/useAI";
 
 // ─── Design tokens ─────────────────────────────
 const cardStyle: React.CSSProperties = {
@@ -73,47 +75,52 @@ function saveDismissed(ids: Set<string>) {
   } catch {}
 }
 
-// ─── Stacked Bar Data (static) ──────────────────
-const weeklySpendData = [
-  { week: "Week 1", Food: 1200, Transport: 600, Shopping: 400, Entertainment: 250, Health: 150, Utilities: 500 },
-  { week: "Week 2", Food: 1400, Transport: 450, Shopping: 1800, Entertainment: 350, Health: 100, Utilities: 200 },
-  { week: "Week 3", Food: 900, Transport: 500, Shopping: 800, Entertainment: 150, Health: 200, Utilities: 300 },
-  { week: "Week 4", Food: 700, Transport: 300, Shopping: 2500, Entertainment: 0, Health: 50, Utilities: 200 },
-];
+// ─── Chart colour map (category → hex) ─────────
+const CAT_COLOR: Record<string, string> = {
+  "Food & Dining": "#F59E0B",
+  "Transport":     "#6C47FF",
+  "Shopping":      "#EF4444",
+  "Entertainment": "#22C55E",
+  "Utilities":     "#3B82F6",
+  "Health & Fitness": "#EC4899",
+  "Housing":       "#78716C",
+  "Education":     "#8B5CF6",
+  "Travel":        "#06B6D4",
+  "Miscellaneous": "#9CA3AF",
+};
 
-const barCategories = [
-  { key: "Food", color: "#F59E0B" },
-  { key: "Transport", color: "#6C47FF" },
-  { key: "Shopping", color: "#EF4444" },
-  { key: "Entertainment", color: "#22C55E" },
-  { key: "Health", color: "#EC4899" },
-  { key: "Utilities", color: "#3B82F6" },
-];
-
-const pieData = [
-  { name: "Food & Dining", value: 4200, color: "#F59E0B" },
-  { name: "Shopping", value: 5499, color: "#EF4444" },
-  { name: "Transport", value: 1850, color: "#6C47FF" },
-  { name: "Utilities", value: 1200, color: "#3B82F6" },
-  { name: "Entertainment", value: 750, color: "#22C55E" },
-  { name: "Health", value: 485, color: "#EC4899" },
-];
-const pieTotal = pieData.reduce((s, d) => s + d.value, 0);
+// ─── Transform raw TrendRow[] → stacked bar format ─
+function buildBarData(trends: TrendRow[]) {
+  // Group by week label, accumulate category totals
+  const weekMap = new Map<string, Record<string, number>>();
+  for (const row of trends) {
+    const label = new Date(row.week).toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+    if (!weekMap.has(label)) weekMap.set(label, {});
+    weekMap.get(label)![row.category] = (weekMap.get(label)![row.category] ?? 0) + row.total;
+  }
+  // Most-recent 4 weeks, chronological order
+  const entries = [...weekMap.entries()].slice(-4);
+  return entries.map(([week, cats]) => ({ week, ...cats }));
+}
 
 // ─── Pure SVG Stacked Bar Chart ────────────────
-function StackedBarChart() {
+function StackedBarChart({ data }: { data: Record<string, any>[] }) {
   const [hovered, setHovered] = useState<{ weekIdx: number; catIdx: number } | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  // Derive category keys and colours from the data itself
+  const catKeys = [...new Set(data.flatMap((w) => Object.keys(w).filter((k) => k !== "week")))];
+  const barCategories = catKeys.map((key) => ({ key, color: CAT_COLOR[key] ?? "#9CA3AF" }));
 
   const W = 520, H = 280;
   const PAD = { top: 20, right: 20, bottom: 30, left: 50 };
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
-  const catKeys = barCategories.map((c) => c.key);
+  const weeklySpendData = data;
   const weekTotals = weeklySpendData.map((w) => catKeys.reduce((s, k) => s + ((w as any)[k] || 0), 0));
-  const maxVal = Math.ceil(Math.max(...weekTotals) / 1000) * 1000;
+  const maxVal = Math.ceil(Math.max(...weekTotals, 1000) / 1000) * 1000;
   const yTicks = Array.from({ length: 5 }, (_, i) => Math.round((maxVal / 4) * i));
-  const barGroupW = plotW / weeklySpendData.length;
+  const barGroupW = plotW / Math.max(weeklySpendData.length, 1);
   const barW = barGroupW * 0.5;
 
   return (
@@ -187,8 +194,10 @@ function StackedBarChart() {
 }
 
 // ─── Pure SVG Donut Chart ──────────────────────
-function DonutChart() {
+function DonutChart({ data }: { data: { name: string; value: number; color: string }[] }) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const pieData = data;
+  const pieTotal = pieData.reduce((s, d) => s + d.value, 0);
   const size = 280, cx = size / 2, cy = size / 2, outerR = 90, innerR = 60, gap = 3;
   let startAngle = 90;
   const arcs = pieData.map((d, i) => {
@@ -237,10 +246,10 @@ function DonutChart() {
   );
 }
 
-function BarLegend() {
+function BarLegend({ cats }: { cats: { key: string; color: string }[] }) {
   return (
     <div className="flex items-center justify-center gap-5 mt-4 flex-wrap">
-      {barCategories.map((c) => (
+      {cats.map((c) => (
         <div key={c.key} className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: c.color }} />
           <span style={{ fontSize: 12, fontWeight: 500, color: "rgba(26,26,46,0.5)" }}>{c.key}</span>
@@ -430,7 +439,24 @@ function HabitCard({ habit, index }: { habit: { category: string; description: s
 
 // ─── Main Page ─────────────────────────────────
 export function InsightsPage() {
-  const { anomalies, habits, isLoading } = useInsights();
+  const { anomalies, habits, trends, isLoading, trendsLoading } = useInsights();
+  const { weeklyReview } = useAI();
+
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const summaryQuery = useExpenseSummary(currentMonth);
+
+  // Build chart data from live sources
+  const barData = buildBarData(trends);
+  const barCats = [...new Set(trends.map((t) => t.category))].map((key) => ({
+    key,
+    color: CAT_COLOR[key] ?? "#9CA3AF",
+  }));
+
+  const pieData = Object.entries(summaryQuery.data?.categoryBreakdown ?? {})
+    .filter(([, v]) => v > 0)
+    .map(([name, value]) => ({ name, value, color: CAT_COLOR[name] ?? "#9CA3AF" }))
+    .sort((a, b) => b.value - a.value);
 
   // Dismissed anomaly IDs (by category) — initialised once from localStorage
   const [dismissed, setDismissed] = useState<Set<string>>(loadDismissed);
@@ -541,26 +567,48 @@ export function InsightsPage() {
         <div className="grid grid-cols-5 gap-5 mb-8">
           <div className="col-span-3 p-6" style={cardStyle}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1A1A2E", marginBottom: 20 }}>
-              Monthly Spend Breakdown
+              Weekly Spend Breakdown
             </h3>
-            <StackedBarChart />
-            <BarLegend />
+            {trendsLoading ? (
+              <div className="h-[280px] rounded-xl animate-pulse" style={{ backgroundColor: "rgba(108,71,255,0.06)" }} />
+            ) : barData.length === 0 ? (
+              <div className="h-[280px] flex items-center justify-center">
+                <p style={{ fontSize: 14, color: "rgba(26,26,46,0.35)", fontWeight: 500 }}>No trend data yet.</p>
+              </div>
+            ) : (
+              <>
+                <StackedBarChart data={barData} />
+                <BarLegend cats={barCats} />
+              </>
+            )}
           </div>
           <div className="col-span-2 p-6 flex flex-col" style={cardStyle}>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1A1A2E", marginBottom: 8 }}>
               Category Split
             </h3>
-            <div className="flex-1 flex items-center justify-center">
-              <DonutChart />
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-2 mt-2 justify-center">
-              {pieData.map((d) => (
-                <div key={d.name} className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
-                  <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(26,26,46,0.5)" }}>{d.name}</span>
+            {summaryQuery.isLoading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="w-[280px] h-[280px] rounded-full animate-pulse" style={{ backgroundColor: "rgba(108,71,255,0.06)" }} />
+              </div>
+            ) : pieData.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p style={{ fontSize: 14, color: "rgba(26,26,46,0.35)", fontWeight: 500 }}>No expenses this month.</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 flex items-center justify-center">
+                  <DonutChart data={pieData} />
                 </div>
-              ))}
-            </div>
+                <div className="flex flex-wrap gap-x-4 gap-y-2 mt-2 justify-center">
+                  {pieData.map((d) => (
+                    <div key={d.name} className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                      <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(26,26,46,0.5)" }}>{d.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -635,23 +683,46 @@ export function InsightsPage() {
               </div>
             </div>
 
-            <div className="p-5 rounded-2xl mb-4"
-              style={{ backgroundColor: "rgba(255,255,255,0.7)", backdropFilter: "blur(8px)" }}>
-              <p style={{ fontSize: 15, color: "#1A1A2E", lineHeight: 1.7 }}>
-                This week you spent{" "}
-                <span style={{ fontWeight: 700, color: "#EF4444" }}>22% more on dining</span> than
-                last week, mostly from Zomato and Swiggy orders. Your biggest win:{" "}
-                <span style={{ fontWeight: 700, color: "#22C55E" }}>zero entertainment spend</span>{" "}
-                — that's ₹750 saved compared to your usual pattern.{" "}
-                <span style={{ fontWeight: 600, color: "#6C47FF" }}>
-                  Tip: Try meal prepping on Sundays to cut Food costs by 30% next week.
-                </span>
-              </p>
-            </div>
-
-            <p style={{ fontSize: 12, color: "rgba(26,26,46,0.35)", fontWeight: 500 }}>
-              Generated by Clutch AI · Every Sunday
-            </p>
+            {weeklyReview.isLoading ? (
+              <div className="flex flex-col gap-3 animate-pulse">
+                <div className="h-4 rounded-lg w-3/4" style={{ backgroundColor: "rgba(108,71,255,0.1)" }} />
+                <div className="h-4 rounded-lg w-full" style={{ backgroundColor: "rgba(108,71,255,0.1)" }} />
+                <div className="h-4 rounded-lg w-5/6" style={{ backgroundColor: "rgba(108,71,255,0.1)" }} />
+              </div>
+            ) : weeklyReview.data ? (
+              <>
+                <div className="p-5 rounded-2xl mb-4"
+                  style={{ backgroundColor: "rgba(255,255,255,0.7)", backdropFilter: "blur(8px)" }}>
+                  <p style={{ fontSize: 15, color: "#1A1A2E", lineHeight: 1.7 }}>
+                    {weeklyReview.data.summary}
+                  </p>
+                  {weeklyReview.data.highlights?.length > 0 && (
+                    <ul className="mt-3 flex flex-col gap-1.5">
+                      {weeklyReview.data.highlights.map((h, i) => (
+                        <li key={i} className="flex items-start gap-2" style={{ fontSize: 13, color: "rgba(26,26,46,0.6)" }}>
+                          <span style={{ color: "#6C47FF", marginTop: 2 }}>•</span>
+                          {h}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <p style={{ fontSize: 12, color: "rgba(26,26,46,0.35)", fontWeight: 500 }}>
+                  Week of {new Date(weeklyReview.data.week_start_date).toLocaleDateString("en-IN", { month: "long", day: "numeric", year: "numeric" })} · Generated by Clutch AI
+                </p>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 rounded-2xl"
+                style={{ backgroundColor: "rgba(255,255,255,0.5)" }}>
+                <Sparkles size={28} color="rgba(108,71,255,0.3)" />
+                <p style={{ fontSize: 15, fontWeight: 600, color: "rgba(26,26,46,0.4)", marginTop: 12 }}>
+                  No weekly review yet
+                </p>
+                <p style={{ fontSize: 13, color: "rgba(26,26,46,0.3)", marginTop: 4 }}>
+                  Reviews are generated every Sunday by the Clutch worker.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </main>

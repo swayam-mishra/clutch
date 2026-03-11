@@ -5,7 +5,7 @@ import { apiFetch, ApiError } from "../lib/api";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface Expense {
-  id: number;
+  id: string;
   user_id: string;
   amount: number;
   description: string;
@@ -21,7 +21,7 @@ export interface AddExpenseInput {
 }
 
 export interface EditExpenseInput {
-  id: number;
+  id: string;
   amount?: number;
   description?: string;
   category?: string;
@@ -35,12 +35,27 @@ interface ExpensesResponse {
   offset: number;
 }
 
+export interface ExpenseSummary {
+  month: string;
+  totalSpent: number;
+  categoryBreakdown: Record<string, number>;
+  expenseCount: number;
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
   if (err instanceof Error) return err.message;
   return "Something went wrong.";
+}
+
+export function useExpenseSummary(month: string) {
+  return useQuery({
+    queryKey: ["expenses", "summary", month],
+    queryFn: () => apiFetch<ExpenseSummary>(`/api/expenses/summary?month=${month}`),
+    staleTime: 5 * 60 * 1000,
+  });
 }
 
 export function useExpenses(params?: { month?: string }) {
@@ -90,7 +105,7 @@ export function useExpenses(params?: { month?: string }) {
 
   // ── DELETE ───────────────────────────────────────────────────────────────
   const removeExpense = useMutation({
-    mutationFn: (id: number) =>
+    mutationFn: (id: string) =>
       apiFetch<{ message: string }>(`/api/expenses/${id}`, {
         method: "DELETE",
       }),
