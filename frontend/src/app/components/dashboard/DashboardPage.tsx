@@ -7,7 +7,6 @@ import { BudgetOverview } from "./BudgetOverview";
 import { SpendTrajectory } from "./SpendTrajectory";
 import { ActiveGoals } from "./ActiveGoals";
 import { AskClutchModal } from "./AskClutchModal";
-import { ShouldIBuyButton } from "./ShouldIBuyButton";
 import { HealthScoreCard } from "./HealthScoreCard";
 
 export function DashboardPage() {
@@ -95,7 +94,6 @@ export function DashboardPage() {
       </main>
 
       {showAI && <AskClutchModal onClose={() => setShowAI(false)} />}
-      <ShouldIBuyButton />
     </div>
   );
 }

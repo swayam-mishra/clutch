@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Sparkles, Lightbulb, RotateCcw, Zap } from "lucide-react";
 import { useAI } from "../../../hooks/useAI";
 
@@ -131,6 +131,7 @@ export function AskClutchModal({ onClose }: { onClose: () => void }) {
   const [amount, setAmount] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [result, setResult] = useState<VerdictResult | null>(null);
+  const queryInputRef = useRef<HTMLInputElement>(null);
   const { shouldIBuy } = useAI();
 
   const handleGetVerdict = async () => {
@@ -222,12 +223,35 @@ export function AskClutchModal({ onClose }: { onClose: () => void }) {
           {/* INPUT PHASE */}
           {phase === "input" && (
             <div className="flex flex-col gap-5">
+              {/* Suggestion chips */}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => {
+                    setQuery("I'm thinking about buying [Item] for [Price]. Given my current budget and goals, is this a good idea?");
+                    queryInputRef.current?.focus();
+                  }}
+                  className="px-3.5 py-1.5 rounded-full cursor-pointer transition-all"
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "#6C47FF",
+                    backgroundColor: "#EDE9FF",
+                    border: "1px solid rgba(108,71,255,0.15)",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#DDD6FF")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#EDE9FF")}
+                >
+                  Should I buy this?
+                </button>
+              </div>
+
               {/* Text input */}
               <div className="flex flex-col gap-2">
                 <label style={{ fontSize: 13, fontWeight: 600, color: "rgba(26,26,46,0.5)" }}>
                   What are you about to buy?
                 </label>
                 <input
+                  ref={queryInputRef}
                   type="text"
                   placeholder="e.g. ₹800 running shoes"
                   value={query}
