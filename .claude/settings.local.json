@@ -1,14 +1,16 @@
 {
   "permissions": {
     "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
       "Bash(npx tsc:*)",
       "Bash(node_modules/.bin/tsc:*)",
-      "Bash(npm run:*)",
-      "mcp__ide__getDiagnostics",
       "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(node:*)",
       "Bash(git reset:*)",
       "Bash(git -c:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }
