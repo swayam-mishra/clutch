@@ -2,61 +2,119 @@ import { Request, Response } from "express";
 import pool from "../config/db";
 import { supabase } from "../config/supabase";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { ok, fail } from "../utils/response";
 
-export const register = async (req: Request, res: Response): Promise<void> => {
+// POST /api/auth/signup
+export const signup = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, password } = req.body;
 
-    // Supabase handles hashing and the DB insert via the on_auth_user_created trigger
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name } // maps to raw_user_meta_data in the trigger
-      }
-    });
-
-    if (error) {
-      res.status(400).json({ error: true, message: error.message });
+    if (!name || !email || !password) {
+      fail(res, 400, "name, email, and password are required.", "VALIDATION_ERROR");
+      return;
+    }
+    if (password.length < 6) {
+      fail(res, 400, "Password must be at least 6 characters.", "VALIDATION_ERROR");
       return;
     }
 
-    res.status(201).json({ user: data.user, session: data.session });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
+
+    if (error) {
+      if (error.message.toLowerCase().includes("already registered") ||
+          error.message.toLowerCase().includes("already in use") ||
+          error.message.toLowerCase().includes("email already")) {
+        fail(res, 400, "Email already in use", "EMAIL_TAKEN");
+      } else {
+        fail(res, 400, error.message, "SIGNUP_ERROR");
+      }
+      return;
+    }
+
+    const userId = data.user?.id;
+    const profileResult = await pool.query(
+      "SELECT name, email FROM users WHERE id = $1",
+      [userId]
+    );
+
+    ok(res, {
+      accessToken: data.session?.access_token ?? "",
+      refreshToken: data.session?.refresh_token ?? "",
+      user: {
+        id: userId,
+        name: profileResult.rows[0]?.name ?? name,
+        email: profileResult.rows[0]?.email ?? email,
+        hasBudget: false,
+      },
+    }, 201);
   } catch (error) {
-    res.status(500).json({ error: true, message: "Server error during registration." });
+    fail(res, 500, "Server error during signup.", "INTERNAL_ERROR");
   }
 };
 
+// POST /api/auth/login
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      res.status(401).json({ error: true, message: "Invalid credentials." });
+      fail(res, 401, "Invalid credentials", "INVALID_CREDENTIALS");
       return;
     }
 
-    // data.session.access_token is what the frontend sends in the Bearer header
-    res.json({ user: data.user, token: data.session.access_token, refresh_token: data.session.refresh_token });
+    const userId = data.user?.id;
+
+    const profileResult = await pool.query(
+      "SELECT name, email FROM users WHERE id = $1",
+      [userId]
+    );
+
+    const budgetResult = await pool.query(
+      "SELECT 1 FROM budgets WHERE user_id = $1 LIMIT 1",
+      [userId]
+    );
+
+    ok(res, {
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+      user: {
+        id: userId,
+        name: profileResult.rows[0]?.name ?? data.user.email,
+        email: profileResult.rows[0]?.email ?? data.user.email,
+        hasBudget: budgetResult.rows.length > 0,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ error: true, message: "Server error during login." });
+    fail(res, 500, "Server error during login.", "INTERNAL_ERROR");
   }
 };
 
-export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
+// POST /api/auth/refresh
+export const refresh = async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = await pool.query(
-      "SELECT id, name, email, monthly_income AS \"monthlyIncome\", currency FROM users WHERE id = $1",
-      [req.user?.id]
-    );
-    res.json(result.rows[0]);
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      fail(res, 400, "refreshToken is required.", "VALIDATION_ERROR");
+      return;
+    }
+
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+
+    if (error || !data.session) {
+      fail(res, 401, "Invalid or expired refresh token.", "TOKEN_EXPIRED");
+      return;
+    }
+
+    ok(res, { accessToken: data.session.access_token });
   } catch (error) {
-    res.status(500).json({ error: true, message: "Failed to fetch user." });
+    fail(res, 500, "Server error during token refresh.", "INTERNAL_ERROR");
   }
 };
 
@@ -64,29 +122,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
 export const logout = async (req: AuthRequest, res: Response): Promise<void> => {
   const token = req.headers.authorization?.split(" ")[1];
   if (token) {
-    await supabase.auth.admin.signOut(token); // Invalidates the token server-side
+    await supabase.auth.admin.signOut(token);
   }
-  res.json({ message: "Logged out successfully." });
-};
-
-// PUT /api/auth/me
-export const updateMe = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const userId = req.user?.id;
-    const { name, monthlyIncome, currency } = req.body;
-
-    const query = `
-      UPDATE users
-      SET name = COALESCE($1, name),
-          monthly_income = COALESCE($2, monthly_income),
-          currency = COALESCE($3, currency)
-      WHERE id = $4
-      RETURNING id, name, email, monthly_income AS "monthlyIncome", currency;
-    `;
-
-    const result = await pool.query(query, [name, monthlyIncome, currency, userId]);
-    res.json(result.rows[0]);
-  } catch (error) {
-    res.status(500).json({ error: true, message: "Failed to update profile." });
-  }
+  ok(res, {});
 };

@@ -1,193 +1,147 @@
 import { Response } from "express";
 import pool from "../config/db";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { ok, fail } from "../utils/response";
 
-// POST /api/budget — Create or update monthly budget (upsert)
-export const createOrUpdateBudget = async (req: AuthRequest, res: Response) => {
+// POST /api/budget — create or update budget (upsert by user + month derived from startDate)
+export const createOrUpdateBudget = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    const { month, totalIncome, categoryLimits } = req.body;
+    const { amount, currency = "INR", startDate, endDate, distribution = "distribute" } = req.body;
 
-    if (!userId || !month || totalIncome === undefined || !categoryLimits) {
-      res.status(400).json({
-        error: true,
-        code: "VALIDATION_ERROR",
-        message: "month, totalIncome, and categoryLimits are required.",
-        statusCode: 400,
-      });
+    if (!amount || !startDate || !endDate) {
+      fail(res, 400, "amount, startDate, and endDate are required.", "VALIDATION_ERROR");
       return;
     }
 
-    // Validate month format YYYY-MM
-    if (!/^\d{4}-\d{2}$/.test(month)) {
-      res.status(400).json({
-        error: true,
-        code: "VALIDATION_ERROR",
-        message: 'month must be in "YYYY-MM" format.',
-        statusCode: 400,
-      });
-      return;
-    }
+    // Derive month string from startDate
+    const month = startDate.substring(0, 7); // "2026-03-01" → "2026-03"
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const dailyLimit = parseFloat((parseFloat(amount) / totalDays).toFixed(2));
 
     const query = `
-      INSERT INTO budgets (user_id, month, total_income, category_limits)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO budgets (user_id, month, total_income, category_limits, amount, currency, start_date, end_date, distribution)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       ON CONFLICT (user_id, month)
-      DO UPDATE SET total_income = $3, category_limits = $4
-      RETURNING *;
+      DO UPDATE SET
+        total_income = $3,
+        amount = $5,
+        currency = $6,
+        start_date = $7,
+        end_date = $8,
+        distribution = $9
+      RETURNING id, amount, currency, start_date, end_date, distribution;
     `;
 
-    const values = [
+    const result = await pool.query(query, [
       userId,
       month,
-      parseFloat(totalIncome),
-      JSON.stringify(categoryLimits),
-    ];
+      parseFloat(amount),
+      "{}",
+      parseFloat(amount),
+      currency,
+      startDate,
+      endDate,
+      distribution,
+    ]);
 
-    const result = await pool.query(query, values);
-    res.status(201).json(result.rows[0]);
+    const row = result.rows[0];
+    ok(res, {
+      id: row.id,
+      amount: parseFloat(row.amount),
+      currency: row.currency,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      distribution: row.distribution,
+      totalDays,
+      dailyLimit,
+    }, 201);
   } catch (error) {
     console.error("Error creating/updating budget:", error);
-    res.status(500).json({
-      error: true,
-      code: "INTERNAL_ERROR",
-      message: "Failed to create/update budget.",
-      statusCode: 500,
-    });
+    fail(res, 500, "Failed to create/update budget.", "INTERNAL_ERROR");
   }
 };
 
-// GET /api/budget/:month — Get budget for a given month
-export const getBudgetByMonth = async (req: AuthRequest, res: Response) => {
+// GET /api/budget/current — current month budget with live computed stats
+export const getCurrentBudget = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { month } = req.params;
     const userId = req.user?.id;
-
-    const result = await pool.query(
-      "SELECT * FROM budgets WHERE user_id = $1 AND month = $2;",
-      [userId, month]
-    );
-
-    if (result.rows.length === 0) {
-      res.status(404).json({
-        error: true,
-        code: "BUDGET_NOT_FOUND",
-        message: `No budget found for ${month}. Please set your monthly budget first.`,
-        statusCode: 404,
-      });
-      return;
-    }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error("Error fetching budget:", error);
-    res.status(500).json({
-      error: true,
-      code: "INTERNAL_ERROR",
-      message: "Failed to fetch budget.",
-      statusCode: 500,
-    });
-  }
-};
-
-// GET /api/budget/:month/status — Real-time spend vs. budget with velocity
-export const getBudgetStatus = async (req: AuthRequest, res: Response) => {
-  try {
-    const { month } = req.params;
-    const userId = req.user?.id;
+    const today = new Date();
+    const todayStr = today.toISOString().split("T")[0]; // YYYY-MM-DD
 
     const budgetResult = await pool.query(
-      "SELECT * FROM budgets WHERE user_id = $1 AND month = $2;",
-      [userId, month]
+      `SELECT * FROM budgets
+       WHERE user_id = $1 AND start_date <= $2 AND end_date >= $2
+       ORDER BY start_date DESC LIMIT 1`,
+      [userId, todayStr]
     );
 
     if (budgetResult.rows.length === 0) {
-      res.status(404).json({
-        error: true,
-        code: "BUDGET_NOT_FOUND",
-        message: `No budget found for ${month}.`,
-        statusCode: 404,
-      });
+      fail(res, 404, "No active budget found. Please set your monthly budget first.", "BUDGET_NOT_FOUND");
       return;
     }
 
     const budget = budgetResult.rows[0];
+    const startDate = new Date(budget.start_date);
+    const endDate = new Date(budget.end_date);
+    const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const daysElapsed = Math.round((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const daysLeft = Math.max(0, totalDays - daysElapsed + 1);
 
-    // Fetch expenses for this month
-    const [year, mon] = (month as string).split("-").map(Number);
-    const startOfMonth = new Date(year, mon - 1, 1);
-    const endOfMonth = new Date(year, mon, 1);
+    const amount = parseFloat(budget.amount || budget.total_income);
 
-    const expensesResult = await pool.query(
-      "SELECT * FROM expenses WHERE user_id = $1 AND date >= $2 AND date < $3;",
-      [userId, startOfMonth, endOfMonth]
+    // Fetch total spent this period
+    const spentResult = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total
+       FROM expenses
+       WHERE user_id = $1 AND date >= $2 AND date <= $3`,
+      [userId, budget.start_date, budget.end_date]
     );
+    const spent = parseFloat(spentResult.rows[0].total);
+    const remaining = parseFloat((amount - spent).toFixed(2));
 
-    const expenses = expensesResult.rows;
-
-    // Calculate totals
-    const totalSpent = expenses.reduce(
-      (sum: number, e: any) => sum + parseFloat(e.amount),
-      0
+    // Fetch today's spend
+    const todayStart = `${todayStr}T00:00:00Z`;
+    const todayEnd = `${todayStr}T23:59:59Z`;
+    const todaySpentResult = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total
+       FROM expenses
+       WHERE user_id = $1 AND date >= $2 AND date <= $3`,
+      [userId, todayStart, todayEnd]
     );
-    const now = new Date();
-    const dayOfMonth = now.getDate();
-    const daysInMonth = new Date(year, mon, 0).getDate();
-    const daysRemaining = Math.max(0, daysInMonth - dayOfMonth);
-    const spendVelocity =
-      dayOfMonth > 0 ? Math.round(totalSpent / dayOfMonth) : 0;
-    const projectedTotal = spendVelocity * daysInMonth;
-    const totalIncome = parseFloat(budget.total_income);
-    const projectedEndBalance = totalIncome - projectedTotal;
+    const todaySpent = parseFloat(todaySpentResult.rows[0].total);
 
-    // Calculate projected run-out day
-    const remainingBudget = totalIncome - totalSpent;
-    const projectedRunOutDay =
-      spendVelocity > 0
-        ? Math.min(
-            daysInMonth,
-            dayOfMonth + Math.floor(remainingBudget / spendVelocity)
-          )
-        : daysInMonth;
+    const dailyLimit = daysLeft > 0 ? parseFloat((remaining / daysLeft).toFixed(2)) : 0;
+    const todayRemaining = parseFloat((dailyLimit - todaySpent).toFixed(2));
+    const percentUsed = amount > 0 ? parseFloat(((spent / amount) * 100).toFixed(2)) : 0;
 
-    // Category-level status
-    const categoryLimits = budget.category_limits as Record<string, number>;
-    const categorySpend: Record<string, number> = {};
-    for (const expense of expenses) {
-      categorySpend[expense.category] =
-        (categorySpend[expense.category] || 0) + parseFloat(expense.amount);
-    }
+    // Format month string: "march 2026"
+    const monthNames = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+    const monthStr = `${monthNames[startDate.getMonth()]} ${startDate.getFullYear()}`;
 
-    const categoryStatus = Object.entries(categoryLimits).map(
-      ([category, limit]) => {
-        const spent = categorySpend[category] || 0;
-        const percentUsed = limit > 0 ? Math.round((spent / limit) * 100) : 0;
-        let status: "safe" | "warning" | "over" = "safe";
-        if (percentUsed >= 100) status = "over";
-        else if (percentUsed >= 70) status = "warning";
-
-        return { category, limit, spent, percentUsed, status };
-      }
-    );
-
-    res.json({
-      month,
-      totalBudget: totalIncome,
-      totalSpent,
-      dayOfMonth,
-      daysRemaining,
-      spendVelocity,
-      projectedEndBalance,
-      projectedRunOutDay,
-      categoryStatus,
+    ok(res, {
+      id: budget.id,
+      amount,
+      currency: budget.currency ?? "INR",
+      startDate: budget.start_date,
+      endDate: budget.end_date,
+      distribution: budget.distribution ?? "distribute",
+      totalDays,
+      daysLeft,
+      daysElapsed,
+      spent,
+      remaining,
+      dailyLimit,
+      todayRemaining,
+      todaySpent,
+      percentUsed,
+      month: monthStr,
     });
   } catch (error) {
-    console.error("Error fetching budget status:", error);
-    res.status(500).json({
-      error: true,
-      code: "INTERNAL_ERROR",
-      message: "Failed to fetch budget status.",
-      statusCode: 500,
-    });
+    console.error("Error fetching current budget:", error);
+    fail(res, 500, "Failed to fetch budget.", "INTERNAL_ERROR");
   }
 };

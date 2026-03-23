@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { getLatestScore } from "../controllers/healthScore.controller";
+import { chatMessage } from "../controllers/ai.controller";
 import { authenticate } from "../middleware/auth.middleware";
 
 const router = Router();
 
-router.get("/score", authenticate, getLatestScore);
+router.post("/message", authenticate, chatMessage);
 
 export default router;

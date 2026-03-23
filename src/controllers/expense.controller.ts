@@ -3,364 +3,170 @@ import pool from "../config/db";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { invalidateBudgetCache } from "../services/financeContext.service";
 import anthropic from "../config/ai";
+import { ok, fail } from "../utils/response";
 
-const BASE_CATEGORIES = [
+const CATEGORIES = [
   "Food & Dining",
   "Transport",
-  "Utilities",
-  "Housing",
-  "Health & Fitness",
-  "Entertainment",
   "Shopping",
+  "Entertainment",
+  "Health",
+  "Bills",
   "Education",
-  "Travel",
-  "Miscellaneous",
+  "Other",
 ];
 
-const autoCategorizeExpense = async (description: string, amount: number): Promise<string> => {
-  try {
-    const prompt = `You are a financial categorization bot. Categorize the following expense into EXACTLY ONE of the predefined categories.
-
-Predefined Categories: ${BASE_CATEGORIES.join(", ")}
-
-Expense Description: "${description}"
-Expense Amount: ₹${amount}
-
-Rules:
-- Respond ONLY with the exact name of the category from the list above.
-- Do not include any punctuation, explanation, or conversational text.
-- If unsure, output "Miscellaneous".`;
-
-    const response = await anthropic.messages.create({
-      model: "claude-3-haiku-20240307",
-      max_tokens: 10,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const predicted = (response.content[0] as { type: string; text: string }).text.trim();
-    return BASE_CATEGORIES.includes(predicted) ? predicted : "Miscellaneous";
-  } catch (error) {
-    console.error("AI categorization failed:", error);
-    return "Miscellaneous";
-  }
+// Format a Date to { date: "YYYY-MM-DD", time: "HH:mm" }
+const formatDateTime = (d: Date) => {
+  const date = d.toISOString().split("T")[0];
+  const time = d.toISOString().substring(11, 16);
+  return { date, time };
 };
 
-// POST /api/expenses — Log a new expense (with auto-categorization)
-export const createExpense = async (req: AuthRequest, res: Response) => {
+const toExpenseShape = (row: any) => {
+  const dt = formatDateTime(new Date(row.date || row.created_at));
+  return {
+    id: row.id,
+    date: dt.date,
+    time: dt.time,
+    tag: row.tag ?? row.description ?? "",
+    category: row.category,
+    amount: parseFloat(row.amount),
+    confidence: row.confidence ?? 100,
+  };
+};
+
+// POST /api/expenses
+export const createExpense = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    const { amount, category, description, date } = req.body;
+    const { amount, tag, category, confidence = 100 } = req.body;
 
-    if (!userId || !amount) {
-      res.status(400).json({
-        error: true,
-        code: "VALIDATION_ERROR",
-        message: "amount is required.",
-        statusCode: 400,
-      });
+    if (!amount || !tag || !category) {
+      fail(res, 400, "amount, tag, and category are required.", "VALIDATION_ERROR");
       return;
     }
 
-    if (!category && !description) {
-      res.status(400).json({
-        error: true,
-        code: "VALIDATION_ERROR",
-        message: "Provide either a category or a description to auto-categorize.",
-        statusCode: 400,
-      });
-      return;
-    }
+    const result = await pool.query(
+      `INSERT INTO expenses (user_id, amount, category, tag, description, confidence)
+       VALUES ($1, $2, $3, $4, $4, $5)
+       RETURNING *`,
+      [userId, parseFloat(amount), category, tag, parseInt(confidence)]
+    );
 
-    const finalCategory = category || await autoCategorizeExpense(description, parseFloat(amount));
-
-    const query = `
-      INSERT INTO expenses (user_id, amount, category, description, date)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *;
-    `;
-
-    const values = [
-      userId,
-      parseFloat(amount),
-      finalCategory,
-      description || null,
-      date ? new Date(date) : new Date(),
-    ];
-
-    const result = await pool.query(query, values);
     if (userId) invalidateBudgetCache(userId);
-    res.status(201).json({
-      ...result.rows[0],
-      autoCategorized: !category,
-    });
+    ok(res, toExpenseShape(result.rows[0]), 201);
   } catch (error) {
     console.error("Error creating expense:", error);
-    res.status(500).json({
-      error: true,
-      code: "INTERNAL_ERROR",
-      message: "Failed to create expense.",
-      statusCode: 500,
-    });
+    fail(res, 500, "Failed to create expense.", "INTERNAL_ERROR");
   }
 };
 
-// GET /api/expenses — Get all expenses (filterable by month, category, date range, paginated)
-export const getExpenses = async (req: AuthRequest, res: Response) => {
+// GET /api/expenses
+export const getExpenses = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id;
-    const { month, category, startDate, endDate, limit, offset } = req.query;
+    const { date, category, search, limit, offset } = req.query;
 
-    const take = limit ? parseInt(limit as string) : 10;
+    const take = limit ? Math.min(parseInt(limit as string), 100) : 50;
     const skip = offset ? parseInt(offset as string) : 0;
 
-    // Build dynamic WHERE clause
     const conditions: string[] = ["user_id = $1"];
     const params: any[] = [userId];
-    let paramIdx = 2;
+    let idx = 2;
 
+    if (date) {
+      conditions.push(`date::date = $${idx++}`);
+      params.push(date as string);
+    }
     if (category) {
-      conditions.push(`category = $${paramIdx++}`);
+      conditions.push(`category = $${idx++}`);
       params.push(category);
     }
-
-    if (month) {
-      const [year, mon] = (month as string).split("-").map(Number);
-      conditions.push(`date >= $${paramIdx++} AND date < $${paramIdx++}`);
-      params.push(new Date(year, mon - 1, 1), new Date(year, mon, 1));
-    } else if (startDate || endDate) {
-      if (startDate) {
-        conditions.push(`date >= $${paramIdx++}`);
-        params.push(new Date(startDate as string));
-      }
-      if (endDate) {
-        conditions.push(`date <= $${paramIdx++}`);
-        params.push(new Date(endDate as string));
-      }
+    if (search) {
+      conditions.push(`(tag ILIKE $${idx} OR description ILIKE $${idx})`);
+      params.push(`%${search}%`);
+      idx++;
     }
 
-    const whereClause = conditions.join(" AND ");
+    const where = conditions.join(" AND ");
 
-    const expensesQuery = `
-      SELECT * FROM expenses
-      WHERE ${whereClause}
-      ORDER BY date DESC
-      LIMIT $${paramIdx++} OFFSET $${paramIdx++};
-    `;
-    params.push(take, skip);
-
-    const countQuery = `SELECT COUNT(*) FROM expenses WHERE ${whereClause};`;
-
-    const [expensesResult, countResult] = await Promise.all([
-      pool.query(expensesQuery, params),
-      pool.query(countQuery, params.slice(0, params.length - 2)),
+    const [dataResult, countResult] = await Promise.all([
+      pool.query(
+        `SELECT * FROM expenses WHERE ${where} ORDER BY date DESC LIMIT $${idx} OFFSET $${idx + 1}`,
+        [...params, take, skip]
+      ),
+      pool.query(`SELECT COUNT(*) FROM expenses WHERE ${where}`, params),
     ]);
 
-    res.json({
-      expenses: expensesResult.rows,
-      total: parseInt(countResult.rows[0].count),
-      limit: take,
-      offset: skip,
+    const total = parseInt(countResult.rows[0].count);
+    ok(res, {
+      expenses: dataResult.rows.map(toExpenseShape),
+      total,
+      hasMore: skip + take < total,
     });
   } catch (error) {
     console.error("Error fetching expenses:", error);
-    res.status(500).json({
-      error: true,
-      code: "INTERNAL_ERROR",
-      message: "Failed to fetch expenses.",
-      statusCode: 500,
-    });
+    fail(res, 500, "Failed to fetch expenses.", "INTERNAL_ERROR");
   }
 };
 
-// GET /api/expenses/summary — Aggregated totals by category for current month
-export const getExpenseSummary = async (req: AuthRequest, res: Response) => {
+// POST /api/expenses/categorize
+export const categorizeExpense = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.id;
-    const { month } = req.query;
+    const { tag } = req.body;
 
-    // Default to current month
-    const now = new Date();
-    const targetMonth = month
-      ? (month as string)
-      : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-
-    const [year, mon] = targetMonth.split("-").map(Number);
-    const startOfMonth = new Date(year, mon - 1, 1);
-    const endOfMonth = new Date(year, mon, 1);
-
-    const query = `
-      SELECT category, SUM(amount) as total
-      FROM expenses
-      WHERE user_id = $1 AND date >= $2 AND date < $3
-      GROUP BY category;
-    `;
-
-    const result = await pool.query(query, [userId, startOfMonth, endOfMonth]);
-
-    const categoryBreakdown: Record<string, number> = {};
-    let totalSpent = 0;
-
-    for (const row of result.rows) {
-      const amount = parseFloat(row.total);
-      categoryBreakdown[row.category] = amount;
-      totalSpent += amount;
+    if (!tag) {
+      fail(res, 400, "tag is required.", "VALIDATION_ERROR");
+      return;
     }
 
-    res.json({
-      month: targetMonth,
-      totalSpent,
-      categoryBreakdown,
-      expenseCount: result.rows.reduce(
-        (sum: number, _row: any) => sum + 1,
-        0
-      ),
+    const prompt = `You are a financial expense categorizer. Given the expense description, return a JSON object with exactly two keys:
+- "category": one of exactly these values: ${CATEGORIES.map(c => `"${c}"`).join(", ")}
+- "confidence": integer 0–100 indicating how confident you are
+
+Expense: "${tag}"
+
+Respond ONLY with valid JSON. Example: {"category": "Food & Dining", "confidence": 92}`;
+
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 30,
+      messages: [{ role: "user", content: prompt }],
     });
+
+    const text = (response.content[0] as { type: string; text: string }).text.trim();
+    const parsed = JSON.parse(text);
+    const category = CATEGORIES.includes(parsed.category) ? parsed.category : "Other";
+    const confidence = Math.min(100, Math.max(0, parseInt(parsed.confidence) || 70));
+
+    ok(res, { category, confidence });
   } catch (error) {
-    console.error("Error fetching expense summary:", error);
-    res.status(500).json({
-      error: true,
-      code: "INTERNAL_ERROR",
-      message: "Failed to fetch expense summary.",
-      statusCode: 500,
-    });
+    console.error("Error categorizing expense:", error);
+    fail(res, 500, "Failed to categorize expense.", "AI_ERROR");
   }
 };
 
-// GET /api/expenses/:id — Get single expense
-export const getExpenseById = async (req: AuthRequest, res: Response) => {
+// DELETE /api/expenses/:id
+export const deleteExpense = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
 
     const result = await pool.query(
-      "SELECT * FROM expenses WHERE id = $1 AND user_id = $2;",
+      "DELETE FROM expenses WHERE id = $1 AND user_id = $2 RETURNING id",
       [id, userId]
     );
 
     if (result.rows.length === 0) {
-      res.status(404).json({
-        error: true,
-        code: "EXPENSE_NOT_FOUND",
-        message: "Expense not found.",
-        statusCode: 404,
-      });
-      return;
-    }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error("Error fetching expense:", error);
-    res.status(500).json({
-      error: true,
-      code: "INTERNAL_ERROR",
-      message: "Failed to fetch expense.",
-      statusCode: 500,
-    });
-  }
-};
-
-// PUT /api/expenses/:id — Update an expense
-export const updateExpense = async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.id;
-    const { amount, category, description, date } = req.body;
-
-    // Check existence and ownership
-    const existing = await pool.query(
-      "SELECT id FROM expenses WHERE id = $1 AND user_id = $2;",
-      [id, userId]
-    );
-    if (existing.rows.length === 0) {
-      res.status(404).json({
-        error: true,
-        code: "EXPENSE_NOT_FOUND",
-        message: "Expense not found.",
-        statusCode: 404,
-      });
-      return;
-    }
-
-    // Build dynamic SET clause
-    const setClauses: string[] = [];
-    const params: any[] = [];
-    let paramIdx = 1;
-
-    if (amount !== undefined) {
-      setClauses.push(`amount = $${paramIdx++}`);
-      params.push(parseFloat(amount));
-    }
-    if (category !== undefined) {
-      setClauses.push(`category = $${paramIdx++}`);
-      params.push(category);
-    }
-    if (description !== undefined) {
-      setClauses.push(`description = $${paramIdx++}`);
-      params.push(description);
-    }
-    if (date !== undefined) {
-      setClauses.push(`date = $${paramIdx++}`);
-      params.push(new Date(date));
-    }
-    if (setClauses.length === 0) {
-      res.status(400).json({
-        error: true,
-        code: "VALIDATION_ERROR",
-        message: "No fields to update.",
-        statusCode: 400,
-      });
-      return;
-    }
-
-    params.push(id, userId);
-    const query = `
-      UPDATE expenses SET ${setClauses.join(", ")}
-      WHERE id = $${paramIdx} AND user_id = $${paramIdx + 1}
-      RETURNING *;
-    `;
-
-    const result = await pool.query(query, params);    if (userId) invalidateBudgetCache(userId);    res.json(result.rows[0]);
-  } catch (error) {
-    console.error("Error updating expense:", error);
-    res.status(500).json({
-      error: true,
-      code: "INTERNAL_ERROR",
-      message: "Failed to update expense.",
-      statusCode: 500,
-    });
-  }
-};
-
-// DELETE /api/expenses/:id — Delete an expense
-export const deleteExpense = async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.id;
-
-    const result = await pool.query(
-      "DELETE FROM expenses WHERE id = $1 AND user_id = $2 RETURNING id;",
-      [id, userId]
-    );
-
-    if (result.rows.length === 0) {
-      res.status(404).json({
-        error: true,
-        code: "EXPENSE_NOT_FOUND",
-        message: "Expense not found.",
-        statusCode: 404,
-      });
+      fail(res, 404, "Expense not found.", "EXPENSE_NOT_FOUND");
       return;
     }
 
     if (userId) invalidateBudgetCache(userId);
-    res.json({ message: "Expense deleted successfully." });
+    ok(res, {});
   } catch (error) {
     console.error("Error deleting expense:", error);
-    res.status(500).json({
-      error: true,
-      code: "INTERNAL_ERROR",
-      message: "Failed to delete expense.",
-      statusCode: 500,
-    });
+    fail(res, 500, "Failed to delete expense.", "INTERNAL_ERROR");
   }
 };
