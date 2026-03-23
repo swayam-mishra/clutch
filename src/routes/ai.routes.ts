@@ -1,13 +1,10 @@
 import { Router } from "express";
-import { purchaseAdvisor, chatInterface, categorizeExpense, getWeeklyReview, getWeeklyReviewHistory } from "../controllers/ai.controller";
+import { getWeeklyReview } from "../controllers/ai.controller";
 import { authenticate } from "../middleware/auth.middleware";
 
 const router = Router();
 
-router.post("/purchase-advisor", authenticate, purchaseAdvisor);
-router.post("/categorize", authenticate, categorizeExpense);
-router.post("/chat", authenticate, chatInterface);
+// Internal/worker route — not part of the frontend spec
 router.get("/weekly-review", authenticate, getWeeklyReview);
-router.get("/weekly-review/history", authenticate, getWeeklyReviewHistory);
 
 export default router;

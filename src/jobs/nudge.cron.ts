@@ -188,3 +188,4 @@ export const initCronJobs = () => {
       console.error("[CRON] Error polling batch status:", error);
     }
   });
+};

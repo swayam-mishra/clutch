@@ -1,16 +1,20 @@
 import { Request, Response, NextFunction } from "express";
 import { supabase } from "../config/supabase";
+import { fail } from "../utils/response";
 
 export interface AuthRequest extends Request {
   user?: { id: string };
 }
 
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(" ")[1];
+  // DEBUG — remove after diagnosing
+  console.log(`[auth] ${req.method} ${req.path} | Authorization: ${req.headers.authorization ?? "MISSING"}`);
+
+  const token = req.headers.authorization?.split(" ")[1];
 
   if (!token) {
-    res.status(401).json({ error: true, message: "Access denied. No token provided." });
+    console.log("[auth] REJECTED — no token extracted from Authorization header");
+    fail(res, 401, "Access denied. No token provided.", "TOKEN_INVALID");
     return;
   }
 
@@ -18,13 +22,15 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      res.status(403).json({ error: true, message: "Invalid or expired token." });
+      console.log("[auth] REJECTED — supabase.auth.getUser failed:", error?.message ?? "no user returned");
+      fail(res, 401, "Invalid or expired token.", "TOKEN_EXPIRED");
       return;
     }
 
     req.user = { id: user.id };
     next();
-  } catch (error) {
-    res.status(500).json({ error: true, message: "Internal auth error." });
+  } catch (error: any) {
+    console.log("[auth] REJECTED — exception:", error?.message ?? error);
+    fail(res, 500, "Internal auth error.", "INTERNAL_ERROR");
   }
 };
