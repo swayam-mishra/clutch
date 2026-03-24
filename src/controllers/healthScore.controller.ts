@@ -127,8 +127,8 @@ export const getLatestScore = async (req: AuthRequest, res: Response): Promise<v
       trendScores,
       tips: generateTips(factors),
     });
-  } catch (error) {
-    console.error("Error fetching health score:", error);
+  } catch (error: any) {
+    console.error("[health/score] caught:", error?.message ?? error);
     fail(res, 500, "Failed to fetch health score.", "INTERNAL_ERROR");
   }
 };

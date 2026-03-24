@@ -16,10 +16,9 @@ export interface HealthScoreResult {
  */
 export const calculateAndSaveHealthScore = async (userId: string): Promise<HealthScoreResult | null> => {
   const context = await buildFinancialContext(userId);
-  if (!context) return null;
+  if (!context || context.totalBudget <= 0) return null;
 
   // Factor 1: Budget Adherence (0 - 40 points)
-  // How much of the budget is consumed compared to the month's progress?
   const monthProgress = context.dayOfMonth / (context.dayOfMonth + context.daysRemaining);
   const budgetConsumed = context.totalSpent / context.totalBudget;
 
@@ -51,7 +50,7 @@ export const calculateAndSaveHealthScore = async (userId: string): Promise<Healt
     consistency = 30; // Active logging
   }
 
-  const score = Math.round(budgetAdherence + spendingBalance + consistency);
+  const score = Math.min(100, Math.max(0, Math.round(budgetAdherence + spendingBalance + consistency) || 0));
 
   // Generate a plain-English explanation
   let explanation = "Your finances are looking healthy and on track.";

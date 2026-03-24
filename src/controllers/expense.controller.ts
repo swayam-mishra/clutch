@@ -135,7 +135,9 @@ Respond ONLY with valid JSON. Example: {"category": "Food & Dining", "confidence
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = (response.content[0] as { type: string; text: string }).text.trim();
+    const raw = (response.content[0] as { type: string; text: string }).text.trim();
+    // Strip markdown code fences if Claude wraps the response
+    const text = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(text);
     const category = CATEGORIES.includes(parsed.category) ? parsed.category : "Other";
     const confidence = Math.min(100, Math.max(0, parseInt(parsed.confidence) || 70));

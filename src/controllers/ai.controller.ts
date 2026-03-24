@@ -13,9 +13,10 @@ const CLAUDE_HAIKU = "claude-haiku-4-5-20251001";
 export const analyzeAdvisor = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.id!;
-    const { item, price } = req.body;
+    const { item, itemName, price } = req.body;
+    const purchaseItem = itemName ?? item;
 
-    if (!item || price === undefined) {
+    if (!purchaseItem || price === undefined) {
       fail(res, 400, "item and price are required.", "VALIDATION_ERROR");
       return;
     }
@@ -87,10 +88,11 @@ Respond ONLY with a JSON object with exactly these two keys:
         { type: "text", text: staticSystemPrompt, cache_control: { type: "ephemeral" } },
         { type: "text", text: dynamicContext },
       ],
-      messages: [{ role: "user", content: `Should I buy ${item} for ₹${price}?` }],
+      messages: [{ role: "user", content: `Should I buy ${purchaseItem} for ₹${price}?` }],
     } as Parameters<typeof anthropic.messages.create>[0]) as Anthropic.Message;
 
-    const text = (response.content[0] as { type: string; text: string }).text.trim();
+    const raw = (response.content[0] as { type: string; text: string }).text.trim();
+    const text = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
     const aiResult = JSON.parse(text);
 
     // Validate verdict is one of the allowed strings; fall back if AI drifts

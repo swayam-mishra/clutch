@@ -62,10 +62,10 @@ export const buildFinancialContext = async (userId: string): Promise<FinancialCo
       WHERE user_id = $1 AND month = $2
     ),
     expense_data AS (
-      SELECT 
-        COALESCE(SUM(amount), 0) AS total_spent,
+      SELECT
+        COALESCE(SUM(category_total), 0) AS total_spent,
         COALESCE(
-          jsonb_object_agg(category, category_total), 
+          jsonb_object_agg(category, category_total),
           '{}'::jsonb
         ) AS category_spending
       FROM (
