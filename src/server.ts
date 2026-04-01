@@ -21,7 +21,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors({
-  origin: "*",
+  origin: process.env.FRONTEND_URL || "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Authorization", "Content-Type"],
 }));
@@ -51,8 +51,12 @@ app.use("/api/advisor",    advisorRoutes);
 app.use("/api/chat",       chatRoutes);
 app.use("/api/health",     healthRoutes);
 
-app.listen(Number(PORT), '0.0.0.0', () => {
+const server = app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`Clutch backend running on http://0.0.0.0:${PORT}`);
+});
+
+process.on('SIGTERM', () => {
+  server.close(() => process.exit(0));
 });
 
 export default app;
