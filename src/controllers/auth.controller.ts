@@ -90,7 +90,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         hasBudget: budgetResult.rows.length > 0,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    console.error("[login] caught exception:", error?.message ?? error);
     fail(res, 500, "Server error during login.", "INTERNAL_ERROR");
   }
 };

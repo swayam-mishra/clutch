@@ -16,10 +16,9 @@ export interface HealthScoreResult {
  */
 export const calculateAndSaveHealthScore = async (userId: string): Promise<HealthScoreResult | null> => {
   const context = await buildFinancialContext(userId);
-  if (!context) return null;
+  if (!context || context.totalBudget <= 0) return null;
 
   // Factor 1: Budget Adherence (0 - 40 points)
-  // How much of the budget is consumed compared to the month's progress?
   const monthProgress = context.dayOfMonth / (context.dayOfMonth + context.daysRemaining);
   const budgetConsumed = context.totalSpent / context.totalBudget;
 
@@ -42,16 +41,16 @@ export const calculateAndSaveHealthScore = async (userId: string): Promise<Healt
   // Does the user log expenses regularly? We check if they logged anything in the last 3 days.
   let consistency = 15; // default baseline
   const recentExpensesQuery = `
-    SELECT COUNT(*) as count 
-    FROM expenses 
-    WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '3 days';
+    SELECT COUNT(*) as count
+    FROM expenses
+    WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '3 days' AND type = 'expense';
   `;
   const recentResult = await pool.query(recentExpensesQuery, [userId]);
   if (parseInt(recentResult.rows[0].count) > 0) {
     consistency = 30; // Active logging
   }
 
-  const score = Math.round(budgetAdherence + spendingBalance + consistency);
+  const score = Math.min(100, Math.max(0, Math.round(budgetAdherence + spendingBalance + consistency) || 0));
 
   // Generate a plain-English explanation
   let explanation = "Your finances are looking healthy and on track.";

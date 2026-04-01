@@ -79,12 +79,13 @@ export const joinChallenge = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const userId = req.user?.id;
     const challengeId = req.params.id;
+    const { goalId } = req.body;
 
     const result = await pool.query(
-      `INSERT INTO user_challenges (user_id, challenge_id, status)
-       VALUES ($1, $2, 'active')
+      `INSERT INTO user_challenges (user_id, challenge_id, status, goal_id)
+       VALUES ($1, $2, 'active', $3)
        RETURNING *`,
-      [userId, challengeId]
+      [userId, challengeId, goalId ?? null]
     );
 
     const challengeResult = await pool.query(

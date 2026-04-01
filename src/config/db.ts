@@ -11,7 +11,7 @@ const pool = new Pool({
   },
   max: 10,                     // Safe to bump up with Supabase connection pooling
   idleTimeoutMillis: 30000,    // Release idle connections after 30s
-  connectionTimeoutMillis: 2000, // Fail fast if connection takes > 2s
+  connectionTimeoutMillis: 10000, // 10s — pooler connections can be slow to establish
 });
 
 pool.on('error', (err) => {

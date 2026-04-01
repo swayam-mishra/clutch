@@ -42,11 +42,11 @@ export const getAnalyticsSummary = async (req: AuthRequest, res: Response): Prom
     const daysElapsed = Math.round((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const daysLeft = Math.max(0, totalDays - daysElapsed + 1);
 
-    // Fetch all expenses for the budget period
+    // Fetch all real expenses for the budget period (exclude goal allocations)
     const expensesResult = await pool.query(
       `SELECT id, amount, category, COALESCE(tag, description) AS tag, date
        FROM expenses
-       WHERE user_id = $1 AND date::date >= $2 AND date::date <= $3
+       WHERE user_id = $1 AND date::date >= $2 AND date::date <= $3 AND type = 'expense'
        ORDER BY date ASC`,
       [userId, startDate, endDate]
     );

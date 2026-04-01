@@ -13,6 +13,7 @@ const CATEGORIES = [
   "Health",
   "Bills",
   "Education",
+  "Savings",
   "Other",
 ];
 
@@ -71,7 +72,9 @@ export const getExpenses = async (req: AuthRequest, res: Response): Promise<void
     const take = limit ? Math.min(parseInt(limit as string), 100) : 50;
     const skip = offset ? parseInt(offset as string) : 0;
 
+    const includeAllocations = req.query.includeAllocations === "true";
     const conditions: string[] = ["user_id = $1"];
+    if (!includeAllocations) conditions.push("type = 'expense'");
     const params: any[] = [userId];
     let idx = 2;
 
@@ -135,7 +138,9 @@ Respond ONLY with valid JSON. Example: {"category": "Food & Dining", "confidence
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = (response.content[0] as { type: string; text: string }).text.trim();
+    const raw = (response.content[0] as { type: string; text: string }).text.trim();
+    // Strip markdown code fences if Claude wraps the response
+    const text = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
     const parsed = JSON.parse(text);
     const category = CATEGORIES.includes(parsed.category) ? parsed.category : "Other";
     const confidence = Math.min(100, Math.max(0, parseInt(parsed.confidence) || 70));
