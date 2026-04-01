@@ -51,8 +51,8 @@ app.use("/api/advisor",    advisorRoutes);
 app.use("/api/chat",       chatRoutes);
 app.use("/api/health",     healthRoutes);
 
-app.listen(PORT, () => {
-  console.log(`Clutch backend running on http://localhost:${PORT}`);
+app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`Clutch backend running on http://0.0.0.0:${PORT}`);
 });
 
 export default app;

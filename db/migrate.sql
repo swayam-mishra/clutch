@@ -43,3 +43,28 @@ ALTER TABLE challenges ADD COLUMN IF NOT EXISTS difficulty TEXT DEFAULT 'medium'
 -- Rename title → name at DB level (add name column, copy data, keep title for compat)
 ALTER TABLE challenges ADD COLUMN IF NOT EXISTS name TEXT;
 UPDATE challenges SET name = title WHERE name IS NULL;
+
+-- ============================================================
+-- Daily Close-Out & Goal Allocation (v3)
+-- ============================================================
+
+-- expenses: type column distinguishes regular expenses from goal allocations
+ALTER TABLE expenses
+  ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'expense'
+    CHECK (type IN ('expense', 'goal_allocation')),
+  ADD COLUMN IF NOT EXISTS goal_id UUID REFERENCES savings_goals(id)
+    ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_expenses_goal_id
+  ON expenses(user_id, goal_id)
+  WHERE goal_id IS NOT NULL;
+
+-- users: track unallocated savings that rolled over from previous days
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS pending_savings NUMERIC DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS last_closeout_date DATE;
+
+-- user_challenges: optional goal linking
+ALTER TABLE user_challenges
+  ADD COLUMN IF NOT EXISTS goal_id UUID REFERENCES savings_goals(id)
+    ON DELETE SET NULL;

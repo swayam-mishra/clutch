@@ -30,8 +30,9 @@ export const analyzeAdvisor = async (req: AuthRequest, res: Response): Promise<v
 
     const remaining = financialContext.remainingBudget;
     const priceNum = parseFloat(price);
-    const dailyBudget = financialContext.totalBudget > 0
-      ? parseFloat((financialContext.totalBudget / 30).toFixed(2))
+    const totalDays = financialContext.dayOfMonth + financialContext.daysRemaining;
+    const dailyBudget = financialContext.totalBudget > 0 && totalDays > 0
+      ? parseFloat((financialContext.totalBudget / totalDays).toFixed(2))
       : 0;
     const afterPurchase = parseFloat((remaining - priceNum).toFixed(2));
     const percentOfBudget = remaining > 0

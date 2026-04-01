@@ -53,7 +53,23 @@ const computeGoalFields = (row: any) => {
 export const getGoals = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const result = await pool.query(
-      "SELECT * FROM savings_goals WHERE user_id = $1 ORDER BY deadline ASC",
+      `SELECT
+         g.id,
+         g.title,
+         g.target_amount,
+         g.deadline,
+         g.icon_key,
+         g.created_at,
+         COALESCE(SUM(e.amount), 0) AS saved_amount
+       FROM savings_goals g
+       LEFT JOIN expenses e
+         ON e.goal_id = g.id
+         AND e.type = 'goal_allocation'
+         AND e.user_id = $1
+       WHERE g.user_id = $1
+         AND g.deadline >= NOW()
+       GROUP BY g.id
+       ORDER BY g.deadline ASC`,
       [req.user?.id]
     );
     ok(res, { goals: result.rows.map(computeGoalFields) });

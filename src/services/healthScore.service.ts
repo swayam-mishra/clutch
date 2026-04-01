@@ -41,9 +41,9 @@ export const calculateAndSaveHealthScore = async (userId: string): Promise<Healt
   // Does the user log expenses regularly? We check if they logged anything in the last 3 days.
   let consistency = 15; // default baseline
   const recentExpensesQuery = `
-    SELECT COUNT(*) as count 
-    FROM expenses 
-    WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '3 days';
+    SELECT COUNT(*) as count
+    FROM expenses
+    WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '3 days' AND type = 'expense';
   `;
   const recentResult = await pool.query(recentExpensesQuery, [userId]);
   if (parseInt(recentResult.rows[0].count) > 0) {
